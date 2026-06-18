@@ -49,6 +49,8 @@ NEXT_PUBLIC_SITE_URL=http://localhost:3000
 
 Dung `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` theo dashboard Supabase moi. Neu project cua ban van hien `anon public`, co the dung `NEXT_PUBLIC_SUPABASE_ANON_KEY` thay the. `SUPABASE_SERVICE_ROLE_KEY` khong bat buoc neu policy RLS cho phep insert vao `contacts`, nhung nen dat tren Vercel cho route server-side. Khong commit `.env.local`.
 
+Neu ban ket noi Supabase bang integration cua Vercel, Vercel co the tu tao `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`. Server-side code da fallback sang cac ten nay. Tuy nhien, neu sau nay dung Supabase truc tiep trong client component, van nen them `NEXT_PUBLIC_SUPABASE_URL` va `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`.
+
 3. Chay dev server:
 
 ```powershell
@@ -97,6 +99,8 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY
 SUPABASE_SERVICE_ROLE_KEY
 NEXT_PUBLIC_SITE_URL
 ```
+
+Neu da dung Supabase integration cua Vercel, cac bien `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_ANON_KEY` co the da co san. Ban chi can bo sung cac bien `NEXT_PUBLIC_*` neu muon expose Supabase cho client-side code.
 
 8. Deploy. Sau khi deploy xong, cap nhat `NEXT_PUBLIC_SITE_URL` bang domain Vercel neu can.
 
