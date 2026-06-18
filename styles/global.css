@@ -638,3 +638,426 @@ code {
     gap: 0.35rem;
   }
 }
+
+/* MemberHub app */
+.mh-entry,
+.mh-auth {
+  background:
+    linear-gradient(105deg, rgba(18, 24, 23, 0.32), rgba(18, 24, 23, 0.06) 48%, rgba(18, 24, 23, 0.22)),
+    url("/assets/beauty-hero.png") center / cover no-repeat;
+  display: grid;
+  min-height: 100vh;
+  padding: clamp(1rem, 5vw, 2.5rem);
+  place-items: center;
+}
+
+.mh-entry::before,
+.mh-auth::before {
+  background: linear-gradient(180deg, rgba(255, 253, 251, 0.76), rgba(244, 247, 244, 0.9));
+  content: "";
+  inset: 0;
+  pointer-events: none;
+  position: fixed;
+}
+
+.mh-entry-panel,
+.mh-auth-panel {
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  border-radius: 8px;
+  box-shadow: 0 28px 80px rgba(16, 24, 32, 0.24);
+  position: relative;
+  z-index: 1;
+}
+
+.mh-entry-panel {
+  align-items: center;
+  display: grid;
+  gap: 2rem;
+  grid-template-columns: minmax(0, 1fr) minmax(340px, 0.92fr);
+  max-width: 1160px;
+  min-height: 620px;
+  padding: clamp(1.4rem, 4vw, 2.6rem);
+  width: 100%;
+}
+
+.mh-auth-brand,
+.mh-brand {
+  align-items: center;
+  display: flex;
+  gap: 0.85rem;
+}
+
+.mh-auth-brand h1,
+.mh-entry-copy h2,
+.mh-topbar h1 {
+  line-height: 1.05;
+  margin: 0;
+}
+
+.mh-auth-brand p,
+.mh-entry-copy p,
+.mh-topbar p {
+  color: #697684;
+  margin: 0.25rem 0 0;
+}
+
+.mh-entry-copy h2 {
+  font-size: clamp(2.5rem, 6vw, 5.6rem);
+  max-width: 700px;
+}
+
+.mh-entry-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.mh-role-card {
+  background: #ffffff;
+  border: 1px solid #dce4ee;
+  border-left: 5px solid #2563eb;
+  border-radius: 8px;
+  color: #26313d;
+  cursor: pointer;
+  display: grid;
+  gap: 0.35rem;
+  padding: 1.2rem;
+  text-align: left;
+}
+
+.mh-role-card:hover {
+  box-shadow: 0 18px 42px rgba(16, 32, 48, 0.12);
+  transform: translateY(-2px);
+}
+
+.mh-role-card.owner {
+  border-left-color: #c89456;
+}
+
+.mh-role-card.customer {
+  border-left-color: #d45770;
+}
+
+.mh-role-card span {
+  color: #98a4b1;
+  font-size: 0.82rem;
+  font-weight: 900;
+}
+
+.mh-role-card strong {
+  color: #101820;
+  font-size: 1.2rem;
+}
+
+.mh-role-card small {
+  color: #697684;
+  font-size: 0.95rem;
+}
+
+.mh-mark {
+  align-items: center;
+  background: linear-gradient(135deg, #2563eb, #123567);
+  border-radius: 8px;
+  color: #fff;
+  display: inline-flex;
+  font-weight: 900;
+  height: 2.7rem;
+  justify-content: center;
+  width: 2.7rem;
+}
+
+.mh-auth-panel {
+  max-width: 520px;
+  padding: 1.8rem;
+  width: 100%;
+}
+
+.mh-back {
+  background: transparent;
+  border: 0;
+  color: #697684;
+  font-weight: 800;
+  margin-bottom: 1.2rem;
+  padding: 0;
+}
+
+.mh-form {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.mh-form label {
+  color: #26313d;
+  display: grid;
+  font-weight: 800;
+  gap: 0.45rem;
+}
+
+.mh-form input {
+  background: #f7f9fc;
+  border: 1px solid #dce4ee;
+  border-radius: 8px;
+  padding: 0.85rem 0.9rem;
+}
+
+.mh-primary,
+.mh-account button,
+.mh-nav button {
+  align-items: center;
+  border-radius: 8px;
+  display: inline-flex;
+  font: inherit;
+  font-weight: 800;
+  gap: 0.5rem;
+  justify-content: center;
+}
+
+.mh-primary {
+  background: #2563eb;
+  border: 1px solid #2563eb;
+  color: #fff;
+  min-height: 2.8rem;
+}
+
+.mh-alert {
+  background: #fdecef;
+  border: 1px solid rgba(212, 87, 112, 0.35);
+  border-radius: 8px;
+  color: #97384f;
+  padding: 0.8rem;
+}
+
+.mh-shell {
+  background: #f4f7fb;
+  color: #26313d;
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  min-height: 100vh;
+}
+
+.mh-sidebar {
+  background: linear-gradient(180deg, #0c1724, #122d4a);
+  color: #fff;
+  padding: 1.2rem;
+}
+
+.mh-brand {
+  margin-bottom: 1.4rem;
+}
+
+.mh-brand span:not(.mh-mark) {
+  color: rgba(255, 255, 255, 0.68);
+  display: block;
+  font-size: 0.86rem;
+}
+
+.mh-nav {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.mh-nav button {
+  background: transparent;
+  border: 1px solid transparent;
+  color: rgba(255, 255, 255, 0.76);
+  justify-content: flex-start;
+  padding: 0.75rem;
+  width: 100%;
+}
+
+.mh-nav button.active,
+.mh-nav button:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+
+.mh-workspace {
+  min-width: 0;
+}
+
+.mh-topbar {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.86);
+  border-bottom: 1px solid #dce4ee;
+  display: flex;
+  justify-content: space-between;
+  padding: 1rem clamp(1rem, 3vw, 2rem);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.mh-account {
+  align-items: center;
+  display: flex;
+  gap: 0.75rem;
+}
+
+.mh-account button {
+  background: #ffffff;
+  border: 1px solid #dce4ee;
+  color: #26313d;
+  padding: 0.65rem 0.8rem;
+}
+
+.mh-view {
+  display: grid;
+  gap: 1rem;
+  padding: clamp(1rem, 3vw, 2rem);
+}
+
+.mh-stats {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.mh-stat,
+.mh-card,
+.mh-empty,
+.mh-member-card {
+  background: #fff;
+  border: 1px solid #dce4ee;
+  border-radius: 8px;
+  box-shadow: 0 10px 28px rgba(16, 32, 48, 0.08);
+}
+
+.mh-stat {
+  display: grid;
+  gap: 0.25rem;
+  padding: 1rem;
+}
+
+.mh-stat span {
+  color: #697684;
+}
+
+.mh-stat strong {
+  color: #101820;
+  font-size: 1.45rem;
+}
+
+.mh-card {
+  overflow: hidden;
+  padding: 1rem;
+}
+
+.mh-card h2 {
+  margin: 0 0 1rem;
+}
+
+.mh-table-wrap {
+  background: #fff;
+  border: 1px solid #dce4ee;
+  border-radius: 8px;
+  box-shadow: 0 10px 28px rgba(16, 32, 48, 0.08);
+  overflow: auto;
+}
+
+.mh-card .mh-table-wrap {
+  border: 0;
+  box-shadow: none;
+}
+
+.mh-table {
+  border-collapse: collapse;
+  min-width: 760px;
+  width: 100%;
+}
+
+.mh-table th,
+.mh-table td {
+  border-bottom: 1px solid #edf2f7;
+  padding: 0.8rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.mh-table th {
+  background: #f7f9fc;
+  color: #697684;
+  font-size: 0.82rem;
+  text-transform: uppercase;
+}
+
+.mh-empty {
+  color: #697684;
+  padding: 1.4rem;
+}
+
+.mh-card-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.mh-member-card {
+  background: linear-gradient(135deg, #101820, #123567);
+  color: #fff;
+  display: grid;
+  gap: 1rem;
+  padding: 1.4rem;
+}
+
+.mh-member-card span,
+.mh-member-card p {
+  color: rgba(255, 255, 255, 0.72);
+  margin: 0;
+}
+
+.mh-member-card h2 {
+  margin: 0;
+}
+
+.mh-member-card div {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.mh-member-card em {
+  background: rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  font-style: normal;
+  padding: 0.25rem 0.7rem;
+}
+
+.mh-profile-extra {
+  display: grid;
+  gap: 0.35rem;
+  margin-top: 1rem;
+}
+
+@media (max-width: 980px) {
+  .mh-shell,
+  .mh-entry-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .mh-sidebar {
+    position: static;
+  }
+
+  .mh-stats,
+  .mh-card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .mh-shell {
+    display: block;
+  }
+
+  .mh-topbar,
+  .mh-account {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .mh-stats,
+  .mh-card-grid {
+    grid-template-columns: 1fr;
+  }
+}

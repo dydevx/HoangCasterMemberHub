@@ -1,6 +1,6 @@
 # HoangCaster Member Hub
 
-Website fullstack dung Next.js, React va Supabase PostgreSQL. App hien thi danh sach san pham/dich vu/bai viet tu Supabase, co trang chi tiet va form lien he/dat hang luu vao bang `contacts`.
+Website fullstack dung Next.js, React va Supabase PostgreSQL. App chinh la MemberHub dashboard voi dang nhap theo vai tro admin/owner/customer, doc du lieu tu Supabase va giu giao dien gan voi ban HTML cu.
 
 ## Stack
 
@@ -14,11 +14,16 @@ Website fullstack dung Next.js, React va Supabase PostgreSQL. App hien thi danh 
 
 ```text
 app/                         Next.js routes, pages va API route
+app/api/auth/login/route.js  Dang nhap MemberHub
+app/api/me/route.js          Kiem tra token hien tai
+app/api/app-data/route.js    Du lieu dashboard theo vai tro
 app/products/[slug]/page.jsx Trang chi tiet san pham
 app/api/contacts/route.js    Luu form lien he vao Supabase
 components/                  UI components
+components/memberhub/        Giao dien MemberHub React
 lib/supabaseClient.js        Supabase browser client
 lib/supabaseServer.js        Supabase server client
+lib/memberhub/auth.js        Verify mat khau va token
 lib/products.js              Truy van products
 styles/global.css            Giao dien responsive
 public/assets/beauty-hero.png Anh hero dung cho giao dien
@@ -27,7 +32,7 @@ database/supabase_schema.sql SQL tao bang, seed data va RLS
 .env.example                 Mau bien moi truong
 ```
 
-Project chinh da duoc don ve Next.js + Supabase. Giao dien HTML cu duoc giu trong `public/legacy/` de tham khao; cac API Node/MariaDB cu khong con duoc chay.
+Project chinh da duoc don ve Next.js + Supabase. Giao dien HTML cu duoc giu trong `public/legacy/` de tham khao; app dang chay that o `/` la ban React/Next.js moi.
 
 ## Chay local
 
@@ -60,6 +65,14 @@ npm.cmd run dev
 Mo `http://localhost:3000`.
 
 Neu vua sua `.env.local`, hay stop dev server cu va chay lai lenh tren de Next.js doc bien moi truong moi.
+
+Tai khoan mau sau khi chay `database/supabase_schema.sql`:
+
+| Vai tro | Email | Mat khau |
+| --- | --- | --- |
+| Admin | `admin@example.com` | `Admin@123` |
+| Chu cua hang | `owner@example.com` | `Owner@123` |
+| Khach hang | `customer@example.com` | `Customer@123` |
 
 ## Tao bang Supabase
 
