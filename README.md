@@ -21,11 +21,12 @@ lib/supabaseClient.js        Supabase browser client
 lib/supabaseServer.js        Supabase server client
 lib/products.js              Truy van products
 styles/global.css            Giao dien responsive
+public/assets/beauty-hero.png Anh hero dung cho giao dien
 database/supabase_schema.sql SQL tao bang, seed data va RLS
 .env.example                 Mau bien moi truong
 ```
 
-Thu muc `src/` va cac file HTML cu trong `public/` duoc giu lai de tham khao, nhung app hien tai chay bang Next.js.
+Project da duoc don ve Next.js + Supabase. Backend Node/MariaDB cu, file HTML tinh cu va du lieu test local da duoc loai bo.
 
 ## Chay local
 
@@ -55,6 +56,8 @@ npm.cmd run dev
 
 Mo `http://localhost:3000`.
 
+Neu vua sua `.env.local`, hay stop dev server cu va chay lai lenh tren de Next.js doc bien moi truong moi.
+
 ## Tao bang Supabase
 
 1. Vao Supabase Dashboard -> SQL Editor.
@@ -71,20 +74,20 @@ SQL nay tao:
 
 ## Deploy len Vercel
 
-1. Push source code len GitHub:
+1. Push source code len GitHub. Repo hien tai dang dung branch `master`:
 
 ```powershell
-git init
 git add .
-git commit -m "Build Next.js Supabase website"
-git branch -M main
-git remote add origin https://github.com/<user>/<repo>.git
-git push -u origin main
+git commit -m "Clean Next.js Supabase project"
+git push origin master
 ```
 
 2. Vao Vercel -> Add New Project -> Import repository tu GitHub.
 3. Framework Preset: Next.js.
-4. Them Environment Variables:
+4. Root Directory: `./`
+5. Build Command: `npm run build`
+6. Output Directory: de trong.
+7. Them Environment Variables:
 
 ```text
 NEXT_PUBLIC_SUPABASE_URL
@@ -94,7 +97,7 @@ SUPABASE_SERVICE_ROLE_KEY
 NEXT_PUBLIC_SITE_URL
 ```
 
-5. Deploy. Sau khi deploy xong, cap nhat `NEXT_PUBLIC_SITE_URL` bang domain Vercel neu can.
+8. Deploy. Sau khi deploy xong, cap nhat `NEXT_PUBLIC_SITE_URL` bang domain Vercel neu can.
 
 ## Scripts
 
