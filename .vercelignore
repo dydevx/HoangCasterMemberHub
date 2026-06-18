@@ -1,0 +1,11 @@
+data/
+node_modules/
+.next/
+.env
+.env*.local
+src/
+scripts/
+database/memberhub_mariadb_import.sql
+public/*.html
+public/app.js
+public/styles.css

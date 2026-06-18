@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>MemberHub - Khách hàng</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body data-page="dashboard" data-page-role="customer">
+    <div id="toast" class="toast" aria-live="polite"></div>
+    <div id="app-shell" class="app-shell hidden">
+      <aside class="sidebar">
+        <div class="brand">
+          <span class="mark">M</span>
+          <div>
+            <strong class="notranslate" translate="no">MemberHub</strong>
+            <span id="role-label">Khách hàng</span>
+          </div>
+        </div>
+        <nav id="nav" class="nav"></nav>
+      </aside>
+
+      <section class="workspace">
+        <header class="topbar">
+          <div>
+            <p id="context-label" class="eyebrow"></p>
+            <h2 id="view-title">Thẻ của tôi</h2>
+          </div>
+          <div class="account">
+            <span id="account-name"></span>
+            <button id="logout-button" class="ghost" type="button">Đăng xuất</button>
+          </div>
+        </header>
+        <main id="view" class="view"></main>
+      </section>
+    </div>
+    <div id="modal-root"></div>
+    <script src="/app.js"></script>
+  </body>
+</html>
