@@ -22,11 +22,12 @@ lib/supabaseServer.js        Supabase server client
 lib/products.js              Truy van products
 styles/global.css            Giao dien responsive
 public/assets/beauty-hero.png Anh hero dung cho giao dien
+public/legacy/              Giao dien HTML cu de tham khao
 database/supabase_schema.sql SQL tao bang, seed data va RLS
 .env.example                 Mau bien moi truong
 ```
 
-Project da duoc don ve Next.js + Supabase. Backend Node/MariaDB cu, file HTML tinh cu va du lieu test local da duoc loai bo.
+Project chinh da duoc don ve Next.js + Supabase. Giao dien HTML cu duoc giu trong `public/legacy/` de tham khao; cac API Node/MariaDB cu khong con duoc chay.
 
 ## Chay local
 
