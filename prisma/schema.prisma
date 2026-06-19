@@ -11,3 +11,182 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
+
+model MemberUser {
+  id           Int          @id @default(autoincrement())
+  name         String
+  email        String       @unique
+  passwordHash String       @map("password_hash")
+  passwordSalt String       @map("password_salt")
+  role         String
+  status       String       @default("active")
+  phone        String?
+  locale       String?      @default("vi")
+  createdAt    DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime     @default(now()) @map("updated_at") @db.Timestamptz(6)
+  ownedShops   Shop[]       @relation("ShopOwner")
+  storeUsers   StoreUser[]
+  customers    Customer[]
+
+  @@index([role])
+  @@index([status])
+  @@map("member_users")
+}
+
+model Shop {
+  id          Int          @id @default(autoincrement())
+  name        String
+  slug        String?      @unique
+  address     String?
+  phone       String?
+  email       String?
+  logoDataUrl String?      @map("logo_data_url")
+  description String?
+  ownerId     Int?         @map("owner_id")
+  status      String       @default("active")
+  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime     @default(now()) @map("updated_at") @db.Timestamptz(6)
+  owner       MemberUser?  @relation("ShopOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  storeUsers  StoreUser[]
+  customers   Customer[]
+  services    Service[]
+  cards       MembershipCard[]
+  transactions Transaction[]
+  promotions  Promotion[]
+
+  @@index([ownerId])
+  @@index([status])
+  @@map("shops")
+}
+
+model StoreUser {
+  id        Int        @id @default(autoincrement())
+  storeId   Int        @map("store_id")
+  userId    Int        @map("user_id")
+  role      String     @default("store_owner")
+  createdAt DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  store     Shop       @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  user      MemberUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, userId])
+  @@index([storeId])
+  @@index([userId])
+  @@map("store_users")
+}
+
+model Customer {
+  id        Int       @id @default(autoincrement())
+  userId    Int?      @map("user_id")
+  shopId    Int       @map("shop_id")
+  name      String
+  slug      String?
+  email     String?
+  phone     String?
+  birthday  DateTime? @db.Date
+  address   String?
+  gender    String?
+  notes     String?
+  avatarUrl String?   @map("avatar_url")
+  status    String    @default("active")
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+  user      MemberUser? @relation(fields: [userId], references: [id], onDelete: SetNull)
+  shop      Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  cards     MembershipCard[]
+  transactions Transaction[]
+
+  @@unique([shopId, slug])
+  @@unique([shopId, userId])
+  @@index([userId])
+  @@index([shopId])
+  @@index([email])
+  @@map("customers")
+}
+
+model Service {
+  id              Int       @id @default(autoincrement())
+  shopId          Int       @map("shop_id")
+  name            String
+  price           Int       @default(0)
+  durationMinutes Int       @default(30) @map("duration_minutes")
+  description     String?
+  imageUrl        String?   @map("image_url")
+  status          String    @default("active")
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+  shop            Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  transactions    Transaction[]
+  promotions      Promotion[]
+
+  @@index([shopId])
+  @@index([status])
+  @@map("services")
+}
+
+model MembershipCard {
+  id         Int       @id @default(autoincrement())
+  customerId Int      @map("customer_id")
+  shopId     Int      @map("shop_id")
+  cardNumber String   @unique @map("card_number")
+  qrPayload  String?  @map("qr_payload")
+  points     Int      @default(0)
+  tier       String   @default("Silver")
+  totalSpend Int      @default(0) @map("total_spend")
+  issuedAt   DateTime @default(now()) @map("issued_at") @db.Timestamptz(6)
+  expiresAt  DateTime? @map("expires_at") @db.Date
+  status     String   @default("active")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  shop       Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
+  @@index([shopId])
+  @@index([shopId, customerId])
+  @@map("membership_cards")
+}
+
+model Transaction {
+  id          Int       @id @default(autoincrement())
+  customerId  Int      @map("customer_id")
+  shopId      Int      @map("shop_id")
+  serviceId   Int?     @map("service_id")
+  price       Int      @default(0)
+  discount    Int      @default(0)
+  tax         Int      @default(0)
+  amount      Int      @default(0)
+  pointsDelta Int      @default(0) @map("points_delta")
+  note        String?
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  customer    Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  shop        Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  service     Service? @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+
+  @@index([customerId])
+  @@index([shopId])
+  @@index([serviceId])
+  @@index([createdAt])
+  @@map("transactions")
+}
+
+model Promotion {
+  id              Int       @id @default(autoincrement())
+  shopId          Int       @map("shop_id")
+  serviceId       Int?      @map("service_id")
+  title           String
+  description     String?
+  type            String    @default("percent")
+  discountPercent Int       @default(0) @map("discount_percent")
+  discountAmount  Int       @default(0) @map("discount_amount")
+  startDate       DateTime? @map("start_date") @db.Date
+  endDate         DateTime? @map("end_date") @db.Date
+  status          String    @default("active")
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+  shop            Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  service         Service?  @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+
+  @@index([shopId])
+  @@index([status])
+  @@map("promotions")
+}

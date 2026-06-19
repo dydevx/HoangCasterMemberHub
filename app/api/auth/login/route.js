@@ -1,11 +1,12 @@
 import { publicUser, signToken, verifyPassword } from "@/lib/memberhub/auth";
+import { normalizeRole, roleMatches } from "@/lib/memberhub/access";
 import { getDemoPasswordForRole, getDemoUserByEmail } from "@/lib/memberhub/demoData";
 import { createSupabaseServerClient } from "@/lib/supabaseServer";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
 const loginSchema = z.object({
-  role: z.enum(["admin", "owner", "customer"]).optional().or(z.literal("")),
+  role: z.enum(["admin", "owner", "customer", "super_admin", "store_owner"]).optional().or(z.literal("")),
   email: z.string().email().transform((value) => value.trim().toLowerCase()),
   password: z.string().min(1)
 });
@@ -32,14 +33,14 @@ export async function POST(request) {
       return NextResponse.json({ error: "Email hoac mat khau khong dung" }, { status: 401 });
     }
 
-    if (role && demoUser.role !== role) {
+    if (role && !roleMatches(demoUser.role, role)) {
       return NextResponse.json({ error: "Tai khoan khong thuoc khu vuc dang nhap nay" }, { status: 403 });
     }
 
     return NextResponse.json({
       demo: true,
       warning: "Supabase is not configured. Running local demo data.",
-      token: signToken({ sub: demoUser.id, role: demoUser.role, demo: true }),
+      token: signToken({ sub: demoUser.id, role: normalizeRole(demoUser.role), demo: true }),
       user: publicUser(demoUser)
     });
   }
@@ -61,7 +62,7 @@ export async function POST(request) {
     return NextResponse.json({ error: "Email hoac mat khau khong dung" }, { status: 401 });
   }
 
-  if (role && user.role !== role) {
+  if (role && !roleMatches(user.role, role)) {
     return NextResponse.json({ error: "Tai khoan khong thuoc khu vuc dang nhap nay" }, { status: 403 });
   }
 
@@ -72,7 +73,7 @@ export async function POST(request) {
   return NextResponse.json({
     authProvider: supabaseAuthMatches ? "supabase" : "memberhub",
     emailVerified: authData?.user?.email_confirmed_at ? true : null,
-    token: signToken({ sub: user.id, role: user.role }),
+    token: signToken({ sub: user.id, role: normalizeRole(user.role) }),
     user: publicUser(user)
   });
 }

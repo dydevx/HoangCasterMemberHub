@@ -1,4 +1,5 @@
 import { hashPassword, requireMemberUser } from "@/lib/memberhub/auth";
+import { isCustomer, isStoreOwner, isSuperAdmin, normalizeRole, toLegacyRole } from "@/lib/memberhub/access";
 import { createSupabaseServerClient } from "@/lib/supabaseServer";
 import { NextResponse } from "next/server";
 
@@ -7,6 +8,12 @@ const resources = {
     table: "shops",
     fields: ["name", "slug", "address", "phone", "email", "description", "owner_id", "status"],
     adminOnlyCreate: true
+  },
+  storeUsers: {
+    table: "store_users",
+    fields: ["store_id", "user_id", "role"],
+    adminOnlyCreate: true,
+    adminOnlyWrite: true
   },
   customers: {
     table: "customers",
@@ -57,6 +64,7 @@ const resources = {
 
 const numericFields = new Set([
   "shop_id",
+  "store_id",
   "user_id",
   "owner_id",
   "customer_id",
@@ -106,23 +114,28 @@ function cleanPayload(body, config) {
 }
 
 async function getOwnedShopIds(supabase, user) {
-  if (user.role === "admin") {
+  if (isSuperAdmin(user)) {
     const { data, error } = await supabase.from("shops").select("id").order("id", { ascending: true });
     if (error) throw error;
     return (data || []).map((shop) => shop.id);
   }
 
-  if (user.role === "owner") {
+  if (isStoreOwner(user)) {
     const { data, error } = await supabase.from("shops").select("id").eq("owner_id", user.id).order("id", { ascending: true });
     if (error) throw error;
-    return (data || []).map((shop) => shop.id);
+    const ownerIds = (data || []).map((shop) => shop.id);
+    const { data: assigned } = await supabase
+      .from("store_users")
+      .select("store_id")
+      .eq("user_id", user.id);
+    return [...new Set([...ownerIds, ...(assigned || []).map((item) => item.store_id)])];
   }
 
   return [];
 }
 
 async function assertCanWrite(supabase, user, config, payload, id) {
-  if (user.role === "customer") {
+  if (isCustomer(user)) {
     if (config.table === "customers" && id) {
       const { data, error } = await supabase
         .from(config.table)
@@ -148,11 +161,15 @@ async function assertCanWrite(supabase, user, config, payload, id) {
     return { error: "Khach hang khong co quyen ghi du lieu quan tri", status: 403 };
   }
 
-  if (config.adminOnlyCreate && !id && user.role !== "admin") {
+  if (config.adminOnlyCreate && !id && !isSuperAdmin(user)) {
     return { error: "Chi admin moi co quyen tao du lieu nay", status: 403 };
   }
 
-  if (user.role === "admin") {
+  if (config.adminOnlyWrite && !isSuperAdmin(user)) {
+    return { error: "Chi admin moi co quyen quan ly du lieu nay", status: 403 };
+  }
+
+  if (isSuperAdmin(user)) {
     return {};
   }
 
@@ -253,8 +270,12 @@ function prepareUserPayload(body, payload, mode) {
   const nextPayload = { ...payload };
 
   if (mode === "post") {
-    nextPayload.role = payload.role || "owner";
+    nextPayload.role = payload.role || "store_owner";
     nextPayload.status = payload.status || "active";
+  }
+
+  if (nextPayload.role) {
+    nextPayload.role = toLegacyRole(nextPayload.role);
   }
 
   if (password) {
@@ -343,7 +364,7 @@ async function writeResource(request, params, mode) {
     payload.qr_payload = `memberhub://card/${payload.card_number}`;
   }
 
-  if (collection === "shops" && !payload.owner_id && auth.user.role === "owner") {
+  if (collection === "shops" && !payload.owner_id && isStoreOwner(auth.user)) {
     payload.owner_id = auth.user.id;
   }
 
@@ -365,11 +386,11 @@ async function writeResource(request, params, mode) {
   }
 
   if (collection === "users") {
-    if (auth.user.role !== "admin") {
+    if (!isSuperAdmin(auth.user)) {
       return NextResponse.json({ error: "Chi admin moi co quyen quan ly nguoi dung" }, { status: 403 });
     }
 
-    if (mode === "post" && payload.role === "admin") {
+    if (mode === "post" && normalizeRole(payload.role) === "super_admin") {
       return NextResponse.json({ error: "Khong the tao them tai khoan admin tu man hinh nay" }, { status: 403 });
     }
 
@@ -384,7 +405,7 @@ async function writeResource(request, params, mode) {
         return NextResponse.json({ error: "Tai khoan khong ton tai" }, { status: 404 });
       }
 
-      if (targetUser.role === "admin") {
+      if (isSuperAdmin(targetUser.role)) {
         const password = String(body.password || "").trim();
 
         if (!password) {
@@ -405,6 +426,43 @@ async function writeResource(request, params, mode) {
     Object.assign(payload, userPayload);
   }
 
+  if (collection === "storeUsers") {
+    payload.role = normalizeRole(payload.role || "store_owner");
+  }
+
+  if (collection === "customers" && mode === "post" && !payload.user_id && payload.email) {
+    const email = String(payload.email || "").trim().toLowerCase();
+    const { data: existingUser } = await supabase
+      .from("member_users")
+      .select("id")
+      .eq("email", email)
+      .maybeSingle();
+
+    if (existingUser?.id) {
+      payload.user_id = existingUser.id;
+    } else {
+      const passwordPayload = hashPassword(String(body.password || "").trim() || "Customer@123");
+      const { data: customerUser, error: customerUserError } = await supabase
+        .from("member_users")
+        .insert({
+          name: payload.name || email,
+          email,
+          role: "customer",
+          status: "active",
+          phone: payload.phone || null,
+          ...passwordPayload
+        })
+        .select("id")
+        .single();
+
+      if (customerUserError) {
+        return NextResponse.json({ error: customerUserError.message }, { status: 400 });
+      }
+
+      payload.user_id = customerUser.id;
+    }
+  }
+
   let previousTransaction = null;
   if (mode === "patch" && collection === "transactions") {
     const { data: previous } = await supabase
@@ -419,6 +477,26 @@ async function writeResource(request, params, mode) {
   const { data, error } = await runMutation(supabase, config, mode, payload, id);
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });
+  }
+
+  if (collection === "storeUsers") {
+    await supabase
+      .from("member_users")
+      .update({ role: "owner" })
+      .eq("id", data.user_id);
+
+    const { data: shop } = await supabase
+      .from("shops")
+      .select("id,owner_id")
+      .eq("id", data.store_id)
+      .maybeSingle();
+
+    if (shop && !shop.owner_id) {
+      await supabase
+        .from("shops")
+        .update({ owner_id: data.user_id })
+        .eq("id", data.store_id);
+    }
   }
 
   if (collection === "transactions") {
@@ -477,7 +555,7 @@ async function deleteResource(request, params) {
       return NextResponse.json({ error: "Tai khoan khong ton tai" }, { status: 404 });
     }
 
-    if (targetUser.role === "admin") {
+    if (isSuperAdmin(targetUser.role)) {
       return NextResponse.json({ error: "Khong the xoa tai khoan admin" }, { status: 403 });
     }
   }

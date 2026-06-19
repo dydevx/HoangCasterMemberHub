@@ -1,4 +1,5 @@
 import { requireMemberUser } from "@/lib/memberhub/auth";
+import { isCustomer, isStoreOwner, isSuperAdmin, normalizeRole } from "@/lib/memberhub/access";
 import { getDemoRawData } from "@/lib/memberhub/demoData";
 import { createSupabaseServerClient } from "@/lib/supabaseServer";
 import { NextResponse } from "next/server";
@@ -20,16 +21,24 @@ function byId(items) {
 }
 
 function scopedData(user, data) {
-  if (user.role === "admin") {
+  if (isSuperAdmin(user)) {
     return data;
   }
 
-  if (user.role === "owner") {
-    const ownedShopIds = new Set(data.shops.filter((shop) => shop.owner_id === user.id).map((shop) => shop.id));
+  if (isStoreOwner(user)) {
+    const assignedShopIds = data.storeUsers
+      .filter((item) => item.user_id === user.id)
+      .map((item) => item.store_id);
+    const ownedShopIds = new Set([
+      ...data.shops.filter((shop) => shop.owner_id === user.id).map((shop) => shop.id),
+      ...assignedShopIds
+    ]);
 
     return {
       ...data,
       shops: data.shops.filter((shop) => ownedShopIds.has(shop.id)),
+      storeUsers: data.storeUsers.filter((item) => ownedShopIds.has(item.store_id)),
+      users: data.users.filter((item) => item.id === user.id || data.storeUsers.some((storeUser) => ownedShopIds.has(storeUser.store_id) && storeUser.user_id === item.id)),
       customers: data.customers.filter((item) => ownedShopIds.has(item.shop_id)),
       services: data.services.filter((item) => ownedShopIds.has(item.shop_id)),
       levels: data.levels.filter((item) => ownedShopIds.has(item.shop_id)),
@@ -42,12 +51,15 @@ function scopedData(user, data) {
     };
   }
 
+  if (!isCustomer(user)) return data;
+
   const customerIds = new Set(data.customers.filter((customer) => customer.user_id === user.id).map((customer) => customer.id));
   const shopIds = new Set(data.customers.filter((customer) => customer.user_id === user.id).map((customer) => customer.shop_id));
 
   return {
     ...data,
     shops: data.shops.filter((shop) => shopIds.has(shop.id)),
+    storeUsers: [],
     users: [user],
     customers: data.customers.filter((customer) => customerIds.has(customer.id)),
     services: data.services.filter((service) => shopIds.has(service.shop_id)),
@@ -71,9 +83,19 @@ function shapeData(data) {
   return {
     shops: data.shops.map((shop) => ({
       ...shop,
-      owner_name: userMap.get(shop.owner_id)?.name || ""
+      owner_name: [
+        userMap.get(shop.owner_id)?.name,
+        ...(data.storeUsers || [])
+          .filter((item) => item.store_id === shop.id)
+          .map((item) => userMap.get(item.user_id)?.name)
+      ].filter(Boolean).join(", ")
     })),
-    users: data.users,
+    storeUsers: (data.storeUsers || []).map((item) => ({
+      ...item,
+      shop_name: shopMap.get(item.store_id)?.name || "",
+      user_name: userMap.get(item.user_id)?.name || ""
+    })),
+    users: data.users.map((user) => ({ ...user, role: normalizeRole(user.role) })),
     customers: data.customers.map((customer) => ({
       ...customer,
       shop_name: shopMap.get(customer.shop_id)?.name || ""
@@ -125,9 +147,10 @@ export async function GET(request) {
       });
     }
 
-    const [shops, users, customers, services, levels, cards, transactions, promotions, activityLogs, notifications, settings, languages] = await Promise.all([
+    const [shops, storeUsers, users, customers, services, levels, cards, transactions, promotions, activityLogs, notifications, settings, languages] = await Promise.all([
       readAll(supabase, "shops"),
-      readAll(supabase, "member_users", "id,name,email,role,status,phone,created_at"),
+      readOptional(supabase, "store_users"),
+      readAll(supabase, "member_users", "id,name,email,role,status,phone,locale,created_at"),
       readAll(supabase, "customers"),
       readAll(supabase, "services"),
       readOptional(supabase, "membership_levels"),
@@ -142,6 +165,7 @@ export async function GET(request) {
 
     const shaped = shapeData({
       shops,
+      storeUsers,
       users,
       customers,
       services,

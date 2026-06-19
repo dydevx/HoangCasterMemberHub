@@ -35,18 +35,23 @@ import {
   X
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { createTranslator as createNextIntlTranslator, NextIntlClientProvider } from "next-intl";
+import { dashboardPathFor, isCustomer, isSuperAdmin, normalizeRole } from "@/lib/memberhub/access";
 import { getMessagesForLocale } from "@/lib/memberhub/i18n";
 import { createTranslator, locales } from "@/messages/memberhub";
 
 const credentials = {
-  admin: ["", ""]
+  super_admin: ["admin@example.com", "Admin@123"],
+  store_owner: ["owner@example.com", "Owner@123"],
+  customer: ["customer@example.com", "Customer@123"]
 };
 
 const navItems = {
-  admin: [
+  super_admin: [
     ["overview", "nav.overview", LayoutDashboard],
     ["shops", "nav.shops", Building2],
+    ["storeUsers", "nav.storeOwners", ShieldCheck],
     ["users", "nav.users", UsersRound],
     ["customers", "nav.customers", UserRound],
     ["services", "nav.services", Scissors],
@@ -59,7 +64,7 @@ const navItems = {
     ["logs", "nav.logs", ShieldCheck],
     ["settings", "nav.settings", Settings]
   ],
-  owner: [
+  store_owner: [
     ["overview", "nav.overview", LayoutDashboard],
     ["shop", "nav.shop", Building2],
     ["customers", "nav.customers", UserRound],
@@ -86,6 +91,7 @@ const navItems = {
 const tableMap = {
   shops: "shops",
   shop: "shops",
+  storeUsers: "storeUsers",
   users: "users",
   customers: "customers",
   services: "services",
@@ -99,8 +105,8 @@ const tableMap = {
 };
 
 const roleKeys = {
-  admin: "app.admin",
-  owner: "app.owner",
+  super_admin: "app.admin",
+  store_owner: "app.owner",
   customer: "app.customer"
 };
 
@@ -165,9 +171,10 @@ export function MemberHubApp() {
 }
 
 function MemberHubAppContent({ locale, setLocale }) {
+  const router = useRouter();
   const [token, setToken] = useState("");
   const [user, setUser] = useState(null);
-  const [role, setRole] = useState("admin");
+  const [role, setRole] = useState("super_admin");
   const [view, setView] = useState("overview");
   const [data, setData] = useState(null);
   const [status, setStatus] = useState("");
@@ -202,15 +209,21 @@ function MemberHubAppContent({ locale, setLocale }) {
 
     setToken(savedToken);
     setLoading(true);
+    let bootUser = null;
     api("/api/me", savedToken)
       .then((payload) => {
-        setUser(payload.user);
-        setRole(payload.user.role);
-        setLocale(payload.user.role === "customer" ? payload.user.locale || readStored("memberhub_locale", "vi") : "vi");
-        setView(payload.user.role === "customer" ? "cards" : "overview");
+        const nextUser = { ...payload.user, role: normalizeRole(payload.user.role) };
+        bootUser = nextUser;
+        setUser(nextUser);
+        setRole(nextUser.role);
+        setLocale(isCustomer(nextUser) ? nextUser.locale || readStored("memberhub_locale", "vi") : "vi");
+        setView(isCustomer(nextUser) ? "cards" : "overview");
         return api("/api/app-data", savedToken);
       })
-      .then(setData)
+      .then((nextData) => {
+        setData(nextData);
+        router.replace(dashboardPathFor(bootUser, nextData));
+      })
       .catch(() => {
         localStorage.removeItem("memberhub_token");
         setToken("");
@@ -254,13 +267,15 @@ function MemberHubAppContent({ locale, setLocale }) {
       });
 
       localStorage.setItem("memberhub_token", payload.token);
-      const nextLocale = payload.user.role === "customer" ? payload.user.locale || locale : "vi";
+      const nextUser = { ...payload.user, role: normalizeRole(payload.user.role) };
+      const nextLocale = isCustomer(nextUser) ? nextUser.locale || locale : "vi";
       setToken(payload.token);
-      setUser(payload.user);
+      setUser(nextUser);
       setLocale(nextLocale);
-      setView(payload.user.role === "customer" ? "cards" : "overview");
+      setView(isCustomer(nextUser) ? "cards" : "overview");
       const nextData = await api("/api/app-data", payload.token);
       setData(nextData);
+      router.replace(dashboardPathFor(nextUser, nextData));
     } catch (error) {
       setStatus(error.message);
     } finally {
@@ -273,8 +288,9 @@ function MemberHubAppContent({ locale, setLocale }) {
     setToken("");
     setUser(null);
     setData(null);
-    setRole("admin");
+    setRole("super_admin");
     setView("overview");
+    router.replace("/");
   }
 
   async function changePassword({ currentPassword, newPassword }) {
@@ -337,7 +353,7 @@ function MemberHubAppContent({ locale, setLocale }) {
     );
   }
 
-  const items = navItems[user.role] || navItems.customer;
+  const items = navItems[normalizeRole(user.role)] || navItems.customer;
 
   return (
     <div className="mh-shell">
@@ -366,7 +382,7 @@ function MemberHubAppContent({ locale, setLocale }) {
             <h1>{t(getViewTitleKey(view))}</h1>
           </div>
           <div className="mh-account">
-            {user.role === "customer" ? (
+            {isCustomer(user) ? (
               <LanguageSwitcher locale={locale} setLocale={setLocale} t={t} />
             ) : null}
             <ThemeToggle setTheme={setTheme} t={t} theme={theme} />
@@ -459,7 +475,7 @@ function LoginScreen({ loading, locale, role, status, t, theme, setLocale, setTh
           </button>
         </form>
         <div className="mh-auth-tools">
-          {role === "customer" ? (
+          {normalizeRole(role) === "customer" ? (
             <LanguageSwitcher locale={locale} setLocale={setLocale} t={t} />
           ) : null}
           <ThemeToggle setTheme={setTheme} t={t} theme={theme} />
@@ -478,14 +494,14 @@ function DashboardView({ addLocalRow, deleteLocalRow, toggleLockRow, updateLocal
   const key = tableMap[view];
   const rows = data[key] || [];
 
-  if (view === "cards" && user.role === "customer") {
+  if (view === "cards" && isCustomer(user)) {
     return <CustomerCards cards={rows} t={t} />;
   }
 
   return (
     <ResourceTable
       addLocalRow={addLocalRow}
-      canWrite={user.role !== "customer" && view !== "logs"}
+      canWrite={!isCustomer(user) && view !== "logs" && (view !== "storeUsers" || isSuperAdmin(user))}
       deleteLocalRow={deleteLocalRow}
       toggleLockRow={toggleLockRow}
       updateLocalRow={updateLocalRow}
@@ -572,7 +588,7 @@ function ResourceTable({ addLocalRow, canWrite = false, deleteLocalRow, toggleLo
   const [editingRow, setEditingRow] = useState(null);
   const pageSize = compact ? 6 : 8;
   const editableFields = useMemo(() => getEditableFields(view, t), [t, view]);
-  const modalFields = editingRow?.role === "admin" && view === "users"
+  const modalFields = isSuperAdmin(editingRow) && view === "users"
     ? [{ key: "password", label: t("auth.newPassword"), type: "password", required: true }]
     : editableFields;
 
@@ -670,7 +686,7 @@ function ResourceTable({ addLocalRow, canWrite = false, deleteLocalRow, toggleLo
           fields={modalFields}
           mode={modalMode}
           row={editingRow}
-          title={editingRow?.role === "admin" && view === "users" ? t("auth.changePassword") : null}
+          title={isSuperAdmin(editingRow) && view === "users" ? t("auth.changePassword") : null}
           onClose={() => {
             setEditingRow(null);
             setModalMode("");
@@ -743,7 +759,7 @@ function ResourceModal({ fields, mode, row, title, onClose, onSave, t }) {
 }
 
 function TableRow({ canWrite, collection, columns, compact, deleteLocalRow, row, setEditingRow, setModalMode, t, toggleLockRow }) {
-  const protectedAdmin = collection === "users" && row.role === "admin";
+  const protectedAdmin = collection === "users" && isSuperAdmin(row);
 
   return (
     <tr>
@@ -1098,6 +1114,7 @@ function getViewTitleKey(view) {
     overview: "nav.overview",
     shops: "nav.shops",
     shop: "nav.shop",
+    storeUsers: "nav.storeOwners",
     users: "nav.users",
     customers: "nav.customers",
     services: "nav.services",
@@ -1132,6 +1149,12 @@ function getColumns(view, t) {
       { key: "email", label: t("shop.email") },
       { key: "address", label: t("shop.address") },
       statusColumn
+    ],
+    storeUsers: [
+      { key: "shop_name", label: t("shop.name") },
+      { key: "user_name", label: t("shop.owner") },
+      { key: "role", label: t("common.role") },
+      { key: "created_at", label: t("promotion.dates"), render: (row) => dateText(row.created_at) }
     ],
     users: [
       { key: "name", label: t("customer.name") },
@@ -1246,11 +1269,18 @@ function getEditableFields(view, t) {
       { key: "description", label: t("service.description"), multiline: true },
       { key: "status", label: t("common.status"), defaultValue: "active", options: statusOptions.activeLocked }
     ],
+    storeUsers: [
+      { key: "store_id", label: idLabel(t("shop.name")), type: "number", required: true },
+      { key: "user_id", label: idLabel(t("shop.owner")), type: "number", required: true },
+      { key: "role", label: t("common.role"), defaultValue: "store_owner", options: [
+        { value: "store_owner", label: t("app.owner") }
+      ] }
+    ],
     users: [
       { key: "name", label: t("customer.name") },
       { key: "email", label: t("customer.email"), type: "email" },
-      { key: "role", label: t("common.role"), defaultValue: "owner", options: [
-        { value: "owner", label: t("app.owner") },
+      { key: "role", label: t("common.role"), defaultValue: "store_owner", options: [
+        { value: "store_owner", label: t("app.owner") },
         { value: "customer", label: t("app.customer") }
       ] },
       { key: "phone", label: t("customer.phone") },
@@ -1261,6 +1291,7 @@ function getEditableFields(view, t) {
       { key: "shop_id", label: idLabel(t("shop.name")), type: "number" },
       { key: "name", label: t("customer.name") },
       { key: "email", label: t("customer.email"), type: "email" },
+      { key: "password", label: t("auth.password"), type: "password", addOnly: true, placeholder: "Customer@123" },
       { key: "phone", label: t("customer.phone") },
       { key: "birthday", label: t("customer.birthday"), type: "date" },
       { key: "gender", label: t("customer.gender"), options: [
