@@ -20,7 +20,7 @@ The app runs even before Supabase is configured by falling back to local demo da
 - JWT-style local session token for the demo auth route
 - Lucide React icons
 - CSS responsive UI with light/dark theme
-- i18n dictionaries for English, Vietnamese, Czech, French, German, Japanese, and Korean
+- i18n dictionaries for English, Vietnamese, many European languages, Japanese, and Korean
 
 ## Project Structure
 

@@ -1,9 +1,33 @@
 export const locales = [
   { id: "en", label: "English" },
   { id: "vi", label: "Tieng Viet" },
+  { id: "es", label: "Espanol" },
+  { id: "it", label: "Italiano" },
+  { id: "pt", label: "Portugues" },
+  { id: "nl", label: "Nederlands" },
+  { id: "pl", label: "Polski" },
   { id: "cs", label: "Cestina" },
   { id: "fr", label: "Francais" },
   { id: "de", label: "Deutsch" },
+  { id: "sv", label: "Svenska" },
+  { id: "no", label: "Norsk" },
+  { id: "da", label: "Dansk" },
+  { id: "fi", label: "Suomi" },
+  { id: "el", label: "Greek" },
+  { id: "ro", label: "Romana" },
+  { id: "hu", label: "Magyar" },
+  { id: "sk", label: "Slovencina" },
+  { id: "sl", label: "Slovenscina" },
+  { id: "hr", label: "Hrvatski" },
+  { id: "bg", label: "Bulgarian" },
+  { id: "uk", label: "Ukrainian" },
+  { id: "ru", label: "Russian" },
+  { id: "tr", label: "Turkce" },
+  { id: "et", label: "Eesti" },
+  { id: "lv", label: "Latviesu" },
+  { id: "lt", label: "Lietuviu" },
+  { id: "ga", label: "Irish" },
+  { id: "is", label: "Islenska" },
   { id: "ja", label: "Japanese" },
   { id: "ko", label: "Korean" }
 ];
@@ -269,21 +293,56 @@ const vi = {
 };
 
 const localizedNames = {
-  cs: ["Cestina", "Prehled", "Zakaznici", "Sluzby", "Transakce"],
-  fr: ["Francais", "Vue d'ensemble", "Clients", "Services", "Transactions"],
-  de: ["Deutsch", "Ubersicht", "Kunden", "Dienste", "Transaktionen"],
-  ja: ["Japanese", "Overview", "Customers", "Services", "Transactions"],
-  ko: ["Korean", "Overview", "Customers", "Services", "Transactions"]
+  es: ["Espanol", "Resumen", "Clientes", "Servicios", "Transacciones", "Tiendas", "Informes", "Ajustes"],
+  it: ["Italiano", "Panoramica", "Clienti", "Servizi", "Transazioni", "Negozi", "Report", "Impostazioni"],
+  pt: ["Portugues", "Visao geral", "Clientes", "Servicos", "Transacoes", "Lojas", "Relatorios", "Definicoes"],
+  nl: ["Nederlands", "Overzicht", "Klanten", "Diensten", "Transacties", "Winkels", "Rapporten", "Instellingen"],
+  pl: ["Polski", "Przeglad", "Klienci", "Uslugi", "Transakcje", "Sklepy", "Raporty", "Ustawienia"],
+  cs: ["Cestina", "Prehled", "Zakaznici", "Sluzby", "Transakce", "Obchody", "Reporty", "Nastaveni"],
+  fr: ["Francais", "Vue d'ensemble", "Clients", "Services", "Transactions", "Boutiques", "Rapports", "Parametres"],
+  de: ["Deutsch", "Ubersicht", "Kunden", "Dienste", "Transaktionen", "Shops", "Berichte", "Einstellungen"],
+  sv: ["Svenska", "Oversikt", "Kunder", "Tjanster", "Transaktioner", "Butiker", "Rapporter", "Installningar"],
+  no: ["Norsk", "Oversikt", "Kunder", "Tjenester", "Transaksjoner", "Butikker", "Rapporter", "Innstillinger"],
+  da: ["Dansk", "Overblik", "Kunder", "Tjenester", "Transaktioner", "Butikker", "Rapporter", "Indstillinger"],
+  fi: ["Suomi", "Yleiskatsaus", "Asiakkaat", "Palvelut", "Tapahtumat", "Myymalat", "Raportit", "Asetukset"],
+  el: ["Greek", "Overview", "Customers", "Services", "Transactions", "Shops", "Reports", "Settings"],
+  ro: ["Romana", "Prezentare", "Clienti", "Servicii", "Tranzactii", "Magazine", "Rapoarte", "Setari"],
+  hu: ["Magyar", "Attekintes", "Ugyfelek", "Szolgaltatasok", "Tranzakciok", "Uzletek", "Jelentesek", "Beallitasok"],
+  sk: ["Slovencina", "Prehlad", "Zakaznici", "Sluzby", "Transakcie", "Obchody", "Reporty", "Nastavenia"],
+  sl: ["Slovenscina", "Pregled", "Stranke", "Storitve", "Transakcije", "Trgovine", "Porocila", "Nastavitve"],
+  hr: ["Hrvatski", "Pregled", "Kupci", "Usluge", "Transakcije", "Trgovine", "Izvjestaji", "Postavke"],
+  bg: ["Bulgarian", "Overview", "Customers", "Services", "Transactions", "Shops", "Reports", "Settings"],
+  uk: ["Ukrainian", "Overview", "Customers", "Services", "Transactions", "Shops", "Reports", "Settings"],
+  ru: ["Russian", "Overview", "Customers", "Services", "Transactions", "Shops", "Reports", "Settings"],
+  tr: ["Turkce", "Genel bakis", "Musteriler", "Hizmetler", "Islemler", "Magazalar", "Raporlar", "Ayarlar"],
+  et: ["Eesti", "Ulevaade", "Kliendid", "Teenused", "Tehingud", "Poed", "Aruanded", "Seaded"],
+  lv: ["Latviesu", "Parskats", "Klienti", "Pakalpojumi", "Darijumi", "Veikali", "Atskaites", "Iestatijumi"],
+  lt: ["Lietuviu", "Apzvalga", "Klientai", "Paslaugos", "Operacijos", "Parduotuves", "Ataskaitos", "Nustatymai"],
+  ga: ["Irish", "Overview", "Customers", "Services", "Transactions", "Shops", "Reports", "Settings"],
+  is: ["Islenska", "Yfirlit", "Vidskiptavinir", "Thjonustur", "Faerslur", "Verslanir", "Skyrslur", "Stillingar"],
+  ja: ["Japanese", "Overview", "Customers", "Services", "Transactions", "Shops", "Reports", "Settings"],
+  ko: ["Korean", "Overview", "Customers", "Services", "Transactions", "Shops", "Reports", "Settings"]
 };
+
+function makeDictionary(items) {
+  return {
+    ...en,
+    "common.language": items[0],
+    "nav.overview": items[1],
+    "nav.customers": items[2],
+    "nav.services": items[3],
+    "nav.transactions": items[4],
+    "nav.shops": items[5],
+    "nav.shop": items[5],
+    "nav.reports": items[6],
+    "nav.settings": items[7]
+  };
+}
 
 export const dictionaries = {
   en,
   vi,
-  cs: { ...en, "common.language": localizedNames.cs[0], "nav.overview": localizedNames.cs[1], "nav.customers": localizedNames.cs[2], "nav.services": localizedNames.cs[3], "nav.transactions": localizedNames.cs[4] },
-  fr: { ...en, "common.language": localizedNames.fr[0], "nav.overview": localizedNames.fr[1], "nav.customers": localizedNames.fr[2], "nav.services": localizedNames.fr[3], "nav.transactions": localizedNames.fr[4] },
-  de: { ...en, "common.language": localizedNames.de[0], "nav.overview": localizedNames.de[1], "nav.customers": localizedNames.de[2], "nav.services": localizedNames.de[3], "nav.transactions": localizedNames.de[4] },
-  ja: { ...en, "common.language": localizedNames.ja[0], "nav.overview": localizedNames.ja[1], "nav.customers": localizedNames.ja[2], "nav.services": localizedNames.ja[3], "nav.transactions": localizedNames.ja[4] },
-  ko: { ...en, "common.language": localizedNames.ko[0], "nav.overview": localizedNames.ko[1], "nav.customers": localizedNames.ko[2], "nav.services": localizedNames.ko[3], "nav.transactions": localizedNames.ko[4] }
+  ...Object.fromEntries(Object.entries(localizedNames).map(([id, items]) => [id, makeDictionary(items)]))
 };
 
 export function createTranslator(locale) {
