@@ -248,7 +248,6 @@ function MemberHubAppContent({ locale, setLocale }) {
       const payload = await api("/api/auth/login", "", {
         method: "POST",
         body: JSON.stringify({
-          role,
           email: form.get("email"),
           password: form.get("password")
         })
@@ -434,7 +433,7 @@ function LoginScreen({ loading, locale, role, status, t, theme, setLocale, setTh
         <div className="mh-auth-brand">
           <span className="mh-mark">M</span>
           <div>
-            <p>{t(roleKeys[role])}</p>
+            <p>{t("app.name")}</p>
             <h1>{t("auth.login")}</h1>
           </div>
         </div>
