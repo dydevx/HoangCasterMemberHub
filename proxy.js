@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 
 export function proxy(request) {
   const response = NextResponse.next();
-  response.headers.set("X-Frame-Options", "DENY");
+  const frameAncestors = process.env.ALLOWED_FRAME_ANCESTORS || "'self' https:";
+
+  response.headers.set("Content-Security-Policy", `frame-ancestors ${frameAncestors}`);
   response.headers.set("X-Content-Type-Options", "nosniff");
   response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
   response.headers.set("Permissions-Policy", "camera=(self), microphone=(), geolocation=()");
