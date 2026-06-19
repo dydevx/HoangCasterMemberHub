@@ -32,6 +32,8 @@ import {
   X
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { createTranslator as createNextIntlTranslator, NextIntlClientProvider } from "next-intl";
+import { getMessagesForLocale } from "@/lib/memberhub/i18n";
 import { createTranslator, locales } from "@/messages/memberhub";
 
 const credentials = {
@@ -138,6 +140,21 @@ function readStored(key, fallback) {
 }
 
 export function MemberHubApp() {
+  const [locale, setLocale] = useState("vi");
+  const messages = useMemo(() => getMessagesForLocale(locale), [locale]);
+
+  useEffect(() => {
+    setLocale(readStored("memberhub_locale", "vi"));
+  }, []);
+
+  return (
+    <NextIntlClientProvider locale={locale} messages={messages}>
+      <MemberHubAppContent locale={locale} setLocale={setLocale} />
+    </NextIntlClientProvider>
+  );
+}
+
+function MemberHubAppContent({ locale, setLocale }) {
   const [token, setToken] = useState("");
   const [user, setUser] = useState(null);
   const [role, setRole] = useState("");
@@ -145,14 +162,25 @@ export function MemberHubApp() {
   const [data, setData] = useState(null);
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(false);
-  const [locale, setLocale] = useState("vi");
   const [theme, setTheme] = useState("light");
   const [toast, setToast] = useState("");
 
-  const t = useMemo(() => createTranslator(locale), [locale]);
+  const fallbackT = useMemo(() => createTranslator(locale), [locale]);
+  const intlT = useMemo(() => {
+    return createNextIntlTranslator({
+      locale,
+      messages: getMessagesForLocale(locale)
+    });
+  }, [locale]);
+  const t = (key, fallback) => {
+    try {
+      return intlT(key);
+    } catch {
+      return fallbackT(key, fallback);
+    }
+  };
 
   useEffect(() => {
-    setLocale(readStored("memberhub_locale", "vi"));
     setTheme(readStored("memberhub_theme", "light"));
     const savedToken = localStorage.getItem("memberhub_token") || "";
     if (!savedToken) return;
@@ -183,6 +211,7 @@ export function MemberHubApp() {
   useEffect(() => {
     document.documentElement.lang = locale;
     localStorage.setItem("memberhub_locale", locale);
+    document.cookie = `memberhub_locale=${locale}; path=/; max-age=31536000; samesite=lax`;
   }, [locale]);
 
   useEffect(() => {

@@ -2,14 +2,27 @@ import { publicUser, signToken, verifyPassword } from "@/lib/memberhub/auth";
 import { getDemoPasswordForRole, getDemoUserByEmail } from "@/lib/memberhub/demoData";
 import { createSupabaseServerClient } from "@/lib/supabaseServer";
 import { NextResponse } from "next/server";
+import { z } from "zod";
+
+const loginSchema = z.object({
+  role: z.enum(["admin", "owner", "customer"]).optional().or(z.literal("")),
+  email: z.string().email().transform((value) => value.trim().toLowerCase()),
+  password: z.string().min(1)
+});
 
 export async function POST(request) {
   const supabase = createSupabaseServerClient({ useServiceRole: true });
+  const authClient = createSupabaseServerClient();
 
   const body = await request.json().catch(() => ({}));
-  const email = String(body.email || "").trim().toLowerCase();
-  const password = String(body.password || "");
-  const role = String(body.role || "");
+  const parsed = loginSchema.safeParse(body);
+
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Du lieu dang nhap khong hop le" }, { status: 400 });
+  }
+
+  const { email, password } = parsed.data;
+  const role = parsed.data.role || "";
 
   if (!supabase) {
     const demoUser = getDemoUserByEmail(email);
@@ -31,13 +44,20 @@ export async function POST(request) {
     });
   }
 
+  const { data: authData } = authClient
+    ? await authClient.auth.signInWithPassword({ email, password })
+    : { data: null };
+
   const { data: user, error } = await supabase
     .from("member_users")
     .select("*")
     .eq("email", email)
     .maybeSingle();
 
-  if (error || !user || !verifyPassword(password, user.password_salt, user.password_hash)) {
+  const passwordMatches = user && verifyPassword(password, user.password_salt, user.password_hash);
+  const supabaseAuthMatches = Boolean(authData?.user);
+
+  if (error || !user || (!passwordMatches && !supabaseAuthMatches)) {
     return NextResponse.json({ error: "Email hoac mat khau khong dung" }, { status: 401 });
   }
 
@@ -50,6 +70,8 @@ export async function POST(request) {
   }
 
   return NextResponse.json({
+    authProvider: supabaseAuthMatches ? "supabase" : "memberhub",
+    emailVerified: authData?.user?.email_confirmed_at ? true : null,
     token: signToken({ sub: user.id, role: user.role }),
     user: publicUser(user)
   });

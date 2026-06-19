@@ -20,7 +20,9 @@ The app runs even before Supabase is configured by falling back to local demo da
 - JWT-style local session token for the demo auth route
 - Lucide React icons
 - CSS responsive UI with light/dark theme
-- i18n dictionaries for English, Vietnamese, many European languages, Japanese, and Korean
+- next-intl-backed i18n dictionaries for English, Vietnamese, many European languages, Japanese, and Korean
+- Zod validation on server routes for authentication and contact capture
+- Supabase Auth sign-in path with seed-compatible MemberHub auth fallback
 
 ## Project Structure
 
