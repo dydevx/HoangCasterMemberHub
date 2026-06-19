@@ -1140,7 +1140,7 @@ function getColumns(view, t, data = {}) {
     key,
     label,
     render: (row) => row[key] ? (
-      <a className="mh-inline-link" href={row[key]} target="_blank" rel="noreferrer">
+      <a className="mh-inline-link" href={routePath(row[key])} target="_blank" rel="noreferrer">
         {t("common.open")}
       </a>
     ) : "-"
@@ -1425,6 +1425,23 @@ function optionList(rows = [], valueKey, labelFor) {
     value: String(row[valueKey] ?? ""),
     label: labelFor(row)
   }));
+}
+
+function routePath(value) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  if (text.startsWith("/")) return text;
+  if (/^https?:\/\//i.test(text)) return text;
+  return `/${slugText(text)}`;
+}
+
+function slugText(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
 }
 
 function formatCell(value) {

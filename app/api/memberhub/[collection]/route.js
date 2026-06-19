@@ -323,6 +323,18 @@ async function defaultShopId(supabase, user) {
   return ids[0] || null;
 }
 
+async function memberUserExists(supabase, userId) {
+  if (!userId) return false;
+
+  const { data, error } = await supabase
+    .from("member_users")
+    .select("id")
+    .eq("id", userId)
+    .maybeSingle();
+
+  return !error && Boolean(data?.id);
+}
+
 async function writeResource(request, params, mode) {
   const supabase = createSupabaseServerClient({ useServiceRole: true });
 
@@ -348,6 +360,10 @@ async function writeResource(request, params, mode) {
   }
 
   const payload = cleanPayload(body, config);
+
+  if (collection === "customers" && mode === "patch") {
+    delete payload.user_id;
+  }
 
   if (config.needsShop && !payload.shop_id) {
     const fallbackShopId = await defaultShopId(supabase, auth.user);
@@ -430,6 +446,13 @@ async function writeResource(request, params, mode) {
     payload.role = normalizeRole(payload.role || "store_owner");
   }
 
+  if (collection === "customers" && mode === "post" && payload.user_id) {
+    const hasUser = await memberUserExists(supabase, payload.user_id);
+    if (!hasUser) {
+      delete payload.user_id;
+    }
+  }
+
   if (collection === "customers" && mode === "post" && !payload.user_id && payload.email) {
     const email = String(payload.email || "").trim().toLowerCase();
     const { data: existingUser } = await supabase
@@ -497,6 +520,21 @@ async function writeResource(request, params, mode) {
         .update({ owner_id: data.user_id })
         .eq("id", data.store_id);
     }
+  }
+
+  if (collection === "shops" && data.owner_id) {
+    await supabase
+      .from("member_users")
+      .update({ role: "owner" })
+      .eq("id", data.owner_id);
+
+    await supabase
+      .from("store_users")
+      .upsert({
+        store_id: data.id,
+        user_id: data.owner_id,
+        role: "store_owner"
+      }, { onConflict: "store_id,user_id" });
   }
 
   if (collection === "transactions") {

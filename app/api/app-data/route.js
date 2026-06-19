@@ -20,6 +20,19 @@ function byId(items) {
   return new Map(items.map((item) => [item.id, item]));
 }
 
+function slugify(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+}
+
+function routeSlug(row) {
+  return slugify(row?.slug || row?.name);
+}
+
 function scopedData(user, data) {
   if (isSuperAdmin(user)) {
     return data;
@@ -83,7 +96,8 @@ function shapeData(data) {
   return {
     shops: data.shops.map((shop) => ({
       ...shop,
-      store_url: shop.slug ? `/${shop.slug}` : "",
+      slug: routeSlug(shop),
+      store_url: routeSlug(shop) ? `/${routeSlug(shop)}` : "",
       owner_name: [
         userMap.get(shop.owner_id)?.name,
         ...(data.storeUsers || [])
@@ -94,17 +108,18 @@ function shapeData(data) {
     storeUsers: (data.storeUsers || []).map((item) => ({
       ...item,
       shop_name: shopMap.get(item.store_id)?.name || "",
-      shop_slug: shopMap.get(item.store_id)?.slug || "",
+      shop_slug: routeSlug(shopMap.get(item.store_id)),
       user_name: userMap.get(item.user_id)?.name || "",
       user_email: userMap.get(item.user_id)?.email || ""
     })),
     users: data.users.map((user) => ({ ...user, role: normalizeRole(user.role) })),
     customers: data.customers.map((customer) => ({
       ...customer,
+      slug: routeSlug(customer),
       shop_name: shopMap.get(customer.shop_id)?.name || "",
-      shop_slug: shopMap.get(customer.shop_id)?.slug || "",
-      customer_url: shopMap.get(customer.shop_id)?.slug && customer.slug
-        ? `/${shopMap.get(customer.shop_id).slug}/${customer.slug}`
+      shop_slug: routeSlug(shopMap.get(customer.shop_id)),
+      customer_url: routeSlug(shopMap.get(customer.shop_id)) && routeSlug(customer)
+        ? `/${routeSlug(shopMap.get(customer.shop_id))}/${routeSlug(customer)}`
         : ""
     })),
     services: data.services.map((service) => ({
