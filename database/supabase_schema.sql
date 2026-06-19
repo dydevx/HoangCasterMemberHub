@@ -256,9 +256,7 @@ with check (
 insert into public.member_users
   (id, name, email, password_hash, password_salt, role, status, phone)
 values
-  (1, 'System Admin', 'admin@example.com', '47ebf38d3bca1cd96f3501338d5744c6c19334d96154eb4b1569735325ee40fb53433df9eeb563496ea58c3d970604782945a3b5ea070e3d6ed69d022f8c85d6', 'd11a7099aa9fe23b3c06e70f73ab9e23', 'admin', 'active', '0900000001'),
-  (2, 'Chu Lumi Spa', 'owner@example.com', '3cc7276fbf9477c0fcd2422b5646c949d32a06c58573bfc9088882415713f70e7392c8b52b64aaf7d006c9bd812bb8744278a850fb895902270b5ba676635485', '70f02a18bb94d41bc3ddc3cdce722a66', 'owner', 'active', '0900000002'),
-  (3, 'Nguyen Minh Anh', 'customer@example.com', '52bad10d0f8e56985c939dca77ed14c6b6e634033956a95dd13f99cd5ecbb0461b1fbe429b43ca6d1f21dc68d50fbae21d411c186a3f080e60e843c63ccfe134', '1154c7ebbfc6300abe2cd72cbbb0e8d2', 'customer', 'active', '0900000003')
+  (1, 'System Admin', 'admin@example.com', '47ebf38d3bca1cd96f3501338d5744c6c19334d96154eb4b1569735325ee40fb53433df9eeb563496ea58c3d970604782945a3b5ea070e3d6ed69d022f8c85d6', 'd11a7099aa9fe23b3c06e70f73ab9e23', 'admin', 'active', '0900000001')
 on conflict (id) do update set
   name = excluded.name,
   email = excluded.email,
@@ -268,10 +266,18 @@ on conflict (id) do update set
   status = excluded.status,
   phone = excluded.phone;
 
+delete from public.member_users
+where id <> 1
+  and (
+    email in ('owner@example.com', 'customer@example.com')
+    or email like 'owner%@example.com'
+    or name like 'Demo Owner %'
+  );
+
 insert into public.shops
   (id, name, slug, address, phone, email, description, owner_id, status)
 values
-  (1, 'Lumi Spa Quan 1', 'LumiSpaQuan1', '12 Nguyen Hue, Quan 1, TP.HCM', '028 1111 2222', 'hello@lumispa.vn', 'Cham soc da, massage thu gian va goi thanh vien theo diem.', 2, 'active'),
+  (1, 'Lumi Spa Quan 1', 'LumiSpaQuan1', '12 Nguyen Hue, Quan 1, TP.HCM', '028 1111 2222', 'hello@lumispa.vn', 'Cham soc da, massage thu gian va goi thanh vien theo diem.', null, 'active'),
   (2, 'Nova Fitness Thu Duc', 'NovaFitnessThuDuc', '88 Vo Van Ngan, TP. Thu Duc', '028 3333 4444', 'team@novafit.vn', 'Phong tap va dich vu huan luyen ca nhan.', null, 'active')
 on conflict (id) do update set
   name = excluded.name,
@@ -286,7 +292,7 @@ on conflict (id) do update set
 insert into public.customers
   (id, user_id, shop_id, name, slug, email, phone, birthday, address, status)
 values
-  (1, 3, 1, 'Nguyen Minh Anh', 'NguyenMinhAnh', 'customer@example.com', '0900000003', '1996-05-14', 'Quan Binh Thanh, TP.HCM', 'active'),
+  (1, null, 1, 'Nguyen Minh Anh', 'NguyenMinhAnh', 'minh.anh@example.com', '0900000003', '1996-05-14', 'Quan Binh Thanh, TP.HCM', 'active'),
   (2, null, 1, 'Tran Quoc Bao', 'TranQuocBao', 'bao.tran@example.com', '0900000004', '1992-09-20', 'Quan 3, TP.HCM', 'active')
 on conflict (id) do update set
   user_id = excluded.user_id,
@@ -455,7 +461,7 @@ on conflict (legacy_type, legacy_id) do update set
 insert into public.contacts
   (full_name, email, phone, message, source, status)
 values
-  ('Nguyen Minh Anh', 'customer@example.com', '0900000003', 'Khach hang mau duoc import tu bang customers.', 'import', 'new'),
+  ('Nguyen Minh Anh', 'minh.anh@example.com', '0900000003', 'Khach hang mau duoc import tu bang customers.', 'import', 'new'),
   ('Tran Quoc Bao', 'bao.tran@example.com', '0900000004', 'Khach hang mau duoc import tu bang customers.', 'import', 'new')
 on conflict do nothing;
 
@@ -700,31 +706,16 @@ on conflict (shop_id, key) do update set value = excluded.value;
 insert into public.activity_logs (shop_id, actor_id, actor_name, action, entity_type, entity_id, metadata)
 values
   (1, 1, 'System Admin', 'created.membership_card', 'membership_card', 'MC001IMPORT001', '{"source":"seed"}'),
-  (1, 2, 'Chu Lumi Spa', 'updated.promotion', 'promotion', '1', '{"source":"seed"}'),
+  (1, null, 'System Admin', 'updated.promotion', 'promotion', '1', '{"source":"seed"}'),
   (2, null, 'Nova Fitness Owner', 'exported.report', 'report', 'monthly', '{"source":"seed"}')
 on conflict do nothing;
 
 insert into public.notifications (shop_id, user_id, title, body, status)
 values
-  (1, 2, 'Gold promotion is active', '15 percent offer is visible to Gold members.', 'unread'),
-  (1, 3, 'You earned 55 points', 'Hot Stone Massage transaction was recorded.', 'unread'),
+  (1, null, 'Gold promotion is active', '15 percent offer is visible to Gold members.', 'unread'),
+  (1, null, 'You earned 55 points', 'Hot Stone Massage transaction was recorded.', 'unread'),
   (2, null, 'Revenue report ready', 'June report has been refreshed.', 'read')
 on conflict do nothing;
-
--- Expand seed data toward the requested SaaS scale without storing thousands of lines.
-insert into public.member_users (id, name, email, password_hash, password_salt, role, status, phone, locale)
-select
-  10 + n,
-  'Demo Owner ' || n,
-  'owner' || n || '@example.com',
-  '3cc7276fbf9477c0fcd2422b5646c949d32a06c58573bfc9088882415713f70e7392c8b52b64aaf7d006c9bd812bb8744278a850fb895902270b5ba676635485',
-  '70f02a18bb94d41bc3ddc3cdce722a66',
-  'owner',
-  'active',
-  '0901000' || lpad(n::text, 3, '0'),
-  'en'
-from generate_series(1, 9) as n
-on conflict (id) do nothing;
 
 insert into public.shops (id, name, slug, address, phone, email, owner_id, status)
 select
@@ -734,7 +725,7 @@ select
   (10 + n) || ' SaaS Street',
   '028 7000 ' || lpad(n::text, 4, '0'),
   'shop' || n || '@example.com',
-  10 + ((n - 1) % 9) + 1,
+  null,
   'active'
 from generate_series(1, 3) as n
 on conflict (id) do nothing;

@@ -40,9 +40,7 @@ import { getMessagesForLocale } from "@/lib/memberhub/i18n";
 import { createTranslator, locales } from "@/messages/memberhub";
 
 const credentials = {
-  admin: ["admin@example.com", "Admin@123"],
-  owner: ["owner@example.com", "Owner@123"],
-  customer: ["customer@example.com", "Customer@123"]
+  admin: ["admin@example.com", "Admin@123"]
 };
 
 const navItems = {
@@ -169,11 +167,13 @@ export function MemberHubApp() {
 function MemberHubAppContent({ locale, setLocale }) {
   const [token, setToken] = useState("");
   const [user, setUser] = useState(null);
-  const [role, setRole] = useState("");
+  const [role, setRole] = useState("admin");
   const [view, setView] = useState("overview");
   const [data, setData] = useState(null);
   const [status, setStatus] = useState("");
+  const [booting, setBooting] = useState(true);
   const [loading, setLoading] = useState(false);
+  const [passwordModalOpen, setPasswordModalOpen] = useState(false);
   const [theme, setTheme] = useState("light");
   const [toast, setToast] = useState("");
 
@@ -195,7 +195,10 @@ function MemberHubAppContent({ locale, setLocale }) {
   useEffect(() => {
     setTheme(readStored("memberhub_theme", "light"));
     const savedToken = localStorage.getItem("memberhub_token") || "";
-    if (!savedToken) return;
+    if (!savedToken) {
+      setBooting(false);
+      return;
+    }
 
     setToken(savedToken);
     setLoading(true);
@@ -212,7 +215,10 @@ function MemberHubAppContent({ locale, setLocale }) {
         localStorage.removeItem("memberhub_token");
         setToken("");
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        setLoading(false);
+        setBooting(false);
+      });
   }, []);
 
   useEffect(() => {
@@ -256,7 +262,6 @@ function MemberHubAppContent({ locale, setLocale }) {
       setView(payload.user.role === "customer" ? "cards" : "overview");
       const nextData = await api("/api/app-data", payload.token);
       setData(nextData);
-      if (payload.demo || nextData.demo) setToast(t("error.noSupabase"));
     } catch (error) {
       setStatus(error.message);
     } finally {
@@ -269,8 +274,17 @@ function MemberHubAppContent({ locale, setLocale }) {
     setToken("");
     setUser(null);
     setData(null);
-    setRole("");
+    setRole("admin");
     setView("overview");
+  }
+
+  async function changePassword({ currentPassword, newPassword }) {
+    await api("/api/auth/change-password", token, {
+      method: "POST",
+      body: JSON.stringify({ currentPassword, newPassword })
+    });
+    setToast(t("toast.passwordChanged"));
+    setPasswordModalOpen(false);
   }
 
   async function addLocalRow(collection, row) {
@@ -298,23 +312,13 @@ function MemberHubAppContent({ locale, setLocale }) {
     setToast(t("toast.saved"));
   }
 
-  function selectRole(nextRole) {
-    if (nextRole !== "customer") {
-      setLocale("vi");
-    }
-    setRole(nextRole);
-  }
-
-  if (!role && !user) {
+  if (booting) {
     return (
-      <RoleEntry
-        locale={locale}
-        setLocale={setLocale}
-        setTheme={setTheme}
-        t={t}
-        theme={theme}
-        onSelect={selectRole}
-      />
+      <main className="mh-auth">
+        <section className="mh-auth-panel">
+          <LoadingState t={t} />
+        </section>
+      </main>
     );
   }
 
@@ -329,7 +333,6 @@ function MemberHubAppContent({ locale, setLocale }) {
         theme={theme}
         setLocale={setLocale}
         setTheme={setTheme}
-        onBack={() => setRole("")}
         onSubmit={login}
       />
     );
@@ -369,14 +372,16 @@ function MemberHubAppContent({ locale, setLocale }) {
             ) : null}
             <ThemeToggle setTheme={setTheme} t={t} theme={theme} />
             <span>{user.name}</span>
+            <button type="button" onClick={() => setPasswordModalOpen(true)} title={t("auth.changePassword")}>
+              <Lock size={17} aria-hidden="true" />
+              <span>{t("auth.changePassword")}</span>
+            </button>
             <button type="button" onClick={logout} title={t("auth.logout")}>
               <LogOut size={17} aria-hidden="true" />
               <span>{t("auth.logout")}</span>
             </button>
           </div>
         </header>
-
-        {data?.demo ? <DemoBanner t={t} /> : null}
 
         <main className="mh-view">
           {loading ? <LoadingState t={t} /> : null}
@@ -396,6 +401,13 @@ function MemberHubAppContent({ locale, setLocale }) {
         </main>
       </section>
 
+      {passwordModalOpen ? (
+        <PasswordModal
+          onClose={() => setPasswordModalOpen(false)}
+          onSubmit={changePassword}
+          t={t}
+        />
+      ) : null}
       {toast ? <div className="mh-toast"><Check size={16} />{toast}</div> : null}
     </div>
   );
@@ -413,52 +425,12 @@ function Brand({ t, role }) {
   );
 }
 
-function RoleEntry({ locale, setLocale, setTheme, t, theme, onSelect }) {
-  return (
-    <main className="mh-entry">
-      <section className="mh-entry-panel">
-        <div className="mh-entry-copy">
-          <div className="mh-auth-brand">
-            <span className="mh-mark">M</span>
-            <div>
-              <h1>{t("app.name")}</h1>
-              <p>{t("app.tagline")}</p>
-            </div>
-          </div>
-          <h2>{t("app.chooseWorkspace")}</h2>
-          <p>{t("app.workspaceCopy")}</p>
-          <div className="mh-entry-controls">
-            <ThemeToggle setTheme={setTheme} t={t} theme={theme} />
-          </div>
-        </div>
-        <div className="mh-entry-grid">
-          {[
-            ["admin", "01", "app.admin", "app.adminCopy"],
-            ["owner", "02", "app.owner", "app.ownerCopy"],
-            ["customer", "03", "app.customer", "app.customerCopy"]
-          ].map(([id, number, titleKey, textKey]) => (
-            <button className={`mh-role-card ${id}`} key={id} onClick={() => onSelect(id)} type="button">
-              <span>{number}</span>
-              <strong>{t(titleKey)}</strong>
-              <small>{t(textKey)}</small>
-            </button>
-          ))}
-        </div>
-      </section>
-    </main>
-  );
-}
-
-function LoginScreen({ loading, locale, role, status, t, theme, setLocale, setTheme, onBack, onSubmit }) {
+function LoginScreen({ loading, locale, role, status, t, theme, setLocale, setTheme, onSubmit }) {
   const [email, password] = credentials[role] || ["", ""];
 
   return (
     <main className={`mh-auth role-${role}`}>
       <section className="mh-auth-panel">
-        <button className="mh-back" type="button" onClick={onBack}>
-          <ChevronLeft size={16} />
-          {t("auth.back")}
-        </button>
         <div className="mh-auth-brand">
           <span className="mh-mark">M</span>
           <div>
@@ -480,9 +452,7 @@ function LoginScreen({ loading, locale, role, status, t, theme, setLocale, setTh
               <input name="remember" type="checkbox" defaultChecked />
               {t("auth.remember")}
             </label>
-            <button className="mh-link-button" type="button">{t("auth.forgot")}</button>
           </div>
-          <p className="mh-muted">{t("auth.demo")}</p>
           {status ? <div className="mh-alert">{status}</div> : null}
           <button className="mh-primary" disabled={loading} type="submit">
             {loading ? <Loader2 className="mh-spin" size={17} /> : <LockKeyhole size={17} />}
@@ -532,7 +502,6 @@ function DashboardView({ addLocalRow, deleteLocalRow, toggleLockRow, updateLocal
 function Overview({ data, t, user }) {
   const revenue = data.transactions.reduce((sum, item) => sum + Number(item.amount || 0), 0);
   const points = data.cards.reduce((sum, item) => sum + Number(item.points || 0), 0);
-  const returning = new Set(data.transactions.map((item) => item.customer_id)).size;
   const newCustomers = data.customers.filter((item) => {
     const created = new Date(item.created_at || Date.now());
     return Date.now() - created.getTime() < 1000 * 60 * 60 * 24 * 30;
@@ -549,26 +518,10 @@ function Overview({ data, t, user }) {
         <Stat label={t("dashboard.points")} value={points.toLocaleString("vi-VN")} />
       </div>
 
-      <div className="mh-grid two">
-        <section className="mh-card mh-chart-card">
-          <PanelTitle icon={FileText} title={t("dashboard.topServices")} />
-          <BarChart rows={topServices} />
-        </section>
-        <section className="mh-card">
-          <PanelTitle icon={ShieldCheck} title={t("dashboard.tenantIsolation")} />
-          <p className="mh-muted">{t("dashboard.tenantCopy")}</p>
-          <div className="mh-security-list">
-            <span><Check size={16} /> {t("security.shopScope")}</span>
-            <span><Check size={16} /> {t("security.rls")}</span>
-            <span><Check size={16} /> {t("security.rbac")}</span>
-            <span><Check size={16} /> {t("security.jwt")}</span>
-          </div>
-          <div className="mh-returning">
-            <strong>{returning}</strong>
-            <span>{t("dashboard.returning")}</span>
-          </div>
-        </section>
-      </div>
+      <section className="mh-card mh-chart-card">
+        <PanelTitle icon={FileText} title={t("dashboard.topServices")} />
+        <BarChart rows={topServices} />
+      </section>
 
       <section className="mh-card">
         <PanelTitle icon={ReceiptText} title={t("dashboard.recentTransactions")} />
@@ -990,6 +943,71 @@ function Profile({ customers, t, updateLocalRow, user }) {
   );
 }
 
+function PasswordModal({ onClose, onSubmit, t }) {
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function submit(event) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const currentPassword = String(form.get("currentPassword") || "");
+    const newPassword = String(form.get("newPassword") || "");
+    const confirmPassword = String(form.get("confirmPassword") || "");
+
+    if (newPassword !== confirmPassword) {
+      setError(t("auth.passwordMismatch"));
+      return;
+    }
+
+    try {
+      setSaving(true);
+      setError("");
+      await onSubmit({ currentPassword, newPassword });
+    } catch (passwordError) {
+      setError(passwordError.message || t("auth.changePasswordFailed"));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="mh-modal-backdrop" role="presentation">
+      <section className="mh-modal" role="dialog" aria-modal="true" aria-labelledby="password-title">
+        <header>
+          <h2 id="password-title">{t("auth.changePassword")}</h2>
+          <button type="button" onClick={onClose} title={t("common.cancel")}>
+            <X size={18} />
+          </button>
+        </header>
+        <form className="mh-form" onSubmit={submit}>
+          <label>
+            {t("auth.currentPassword")}
+            <input name="currentPassword" type="password" required autoComplete="current-password" />
+          </label>
+          <label>
+            {t("auth.newPassword")}
+            <input name="newPassword" type="password" required minLength={8} autoComplete="new-password" />
+          </label>
+          <label>
+            {t("auth.confirmPassword")}
+            <input name="confirmPassword" type="password" required minLength={8} autoComplete="new-password" />
+          </label>
+          {error ? <div className="mh-alert">{error}</div> : null}
+          <div className="mh-modal-actions">
+            <button className="mh-tool-button" type="button" onClick={onClose}>
+              {t("common.cancel")}
+            </button>
+            <button className="mh-primary slim" type="submit" disabled={saving}>
+              {saving ? <Loader2 className="mh-spin" size={16} /> : <Lock size={16} />}
+              {saving ? t("common.loading") : t("common.save")}
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>
+  );
+}
+
 function LanguageSwitcher({ locale, setLocale, t }) {
   return (
     <label className="mh-mini-select" title={t("common.language")}>
@@ -1006,15 +1024,6 @@ function ThemeToggle({ setTheme, t, theme }) {
     <button className="mh-icon-toggle" type="button" onClick={() => setTheme(theme === "dark" ? "light" : "dark")} title={t("common.theme")}>
       {theme === "dark" ? <Sun size={17} /> : <Moon size={17} />}
     </button>
-  );
-}
-
-function DemoBanner({ t }) {
-  return (
-    <div className="mh-demo-banner">
-      <ShieldCheck size={18} />
-      <span>{t("error.noSupabase")}</span>
-    </div>
   );
 }
 

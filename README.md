@@ -9,8 +9,6 @@ The app runs even before Supabase is configured by falling back to local demo da
 | Role | Email | Password |
 | --- | --- | --- |
 | Super Admin | `admin@example.com` | `Admin@123` |
-| Store Owner | `owner@example.com` | `Owner@123` |
-| Customer | `customer@example.com` | `Customer@123` |
 
 ## Stack
 

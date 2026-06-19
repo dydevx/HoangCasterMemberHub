@@ -14,9 +14,7 @@ export async function GET(request) {
     demo: auth.demo || false,
     user: publicUser(auth.user),
     defaults: {
-      admin: { email: "admin@example.com", password: "Admin@123" },
-      owner: { email: "owner@example.com", password: "Owner@123" },
-      customer: { email: "customer@example.com", password: "Customer@123" }
+      admin: { email: "admin@example.com", password: "Admin@123" }
     }
   });
 }
