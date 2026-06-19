@@ -1587,6 +1587,15 @@ code {
   width: 2rem;
 }
 
+.mh-action-group {
+  display: inline-flex;
+  gap: 0.45rem;
+}
+
+.mh-icon-action.danger {
+  color: var(--mh-danger);
+}
+
 .mh-pagination {
   justify-content: space-between;
 }

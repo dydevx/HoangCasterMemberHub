@@ -13,6 +13,7 @@ import {
   Globe2,
   LayoutDashboard,
   ListFilter,
+  Lock,
   Loader2,
   LockKeyhole,
   LogOut,
@@ -27,6 +28,8 @@ import {
   ShieldCheck,
   Sparkles,
   Sun,
+  Trash2,
+  Unlock,
   UserRound,
   UsersRound,
   X
@@ -134,6 +137,15 @@ async function api(path, token, options = {}) {
   return payload;
 }
 
+async function saveResource(collection, token, row, method) {
+  const payload = await api(`/api/memberhub/${collection}`, token, {
+    method,
+    body: JSON.stringify(row)
+  });
+
+  return payload.row || row;
+}
+
 function readStored(key, fallback) {
   if (typeof window === "undefined") return fallback;
   return localStorage.getItem(key) || fallback;
@@ -191,7 +203,7 @@ function MemberHubAppContent({ locale, setLocale }) {
       .then((payload) => {
         setUser(payload.user);
         setRole(payload.user.role);
-        setLocale(payload.user.locale || readStored("memberhub_locale", "vi"));
+        setLocale(payload.user.role === "customer" ? payload.user.locale || readStored("memberhub_locale", "vi") : "vi");
         setView(payload.user.role === "customer" ? "cards" : "overview");
         return api("/api/app-data", savedToken);
       })
@@ -237,9 +249,10 @@ function MemberHubAppContent({ locale, setLocale }) {
       });
 
       localStorage.setItem("memberhub_token", payload.token);
+      const nextLocale = payload.user.role === "customer" ? payload.user.locale || locale : "vi";
       setToken(payload.token);
       setUser(payload.user);
-      setLocale(payload.user.locale || locale);
+      setLocale(nextLocale);
       setView(payload.user.role === "customer" ? "cards" : "overview");
       const nextData = await api("/api/app-data", payload.token);
       setData(nextData);
@@ -260,12 +273,36 @@ function MemberHubAppContent({ locale, setLocale }) {
     setView("overview");
   }
 
-  function addLocalRow(collection, row) {
-    setData((current) => ({
-      ...current,
-      [collection]: [{ ...row, id: `local-${Date.now()}`, status: "active" }, ...(current?.[collection] || [])]
-    }));
+  async function addLocalRow(collection, row) {
+    await saveResource(collection, token, row, "POST");
+    setData(await api("/api/app-data", token));
     setToast(t("toast.saved"));
+  }
+
+  async function updateLocalRow(collection, row) {
+    await saveResource(collection, token, row, "PATCH");
+    setData(await api("/api/app-data", token));
+    setToast(t("toast.saved"));
+  }
+
+  async function deleteLocalRow(collection, row) {
+    await saveResource(collection, token, { id: row.id }, "DELETE");
+    setData(await api("/api/app-data", token));
+    setToast(t("toast.deleted"));
+  }
+
+  async function toggleLockRow(collection, row) {
+    const nextStatus = row.status === "locked" ? "active" : "locked";
+    await saveResource(collection, token, { id: row.id, status: nextStatus }, "PATCH");
+    setData(await api("/api/app-data", token));
+    setToast(t("toast.saved"));
+  }
+
+  function selectRole(nextRole) {
+    if (nextRole !== "customer") {
+      setLocale("vi");
+    }
+    setRole(nextRole);
   }
 
   if (!role && !user) {
@@ -276,7 +313,7 @@ function MemberHubAppContent({ locale, setLocale }) {
         setTheme={setTheme}
         t={t}
         theme={theme}
-        onSelect={(nextRole) => setRole(nextRole)}
+        onSelect={selectRole}
       />
     );
   }
@@ -327,7 +364,9 @@ function MemberHubAppContent({ locale, setLocale }) {
             <h1>{t(getViewTitleKey(view))}</h1>
           </div>
           <div className="mh-account">
-            <LanguageSwitcher locale={locale} setLocale={setLocale} t={t} />
+            {user.role === "customer" ? (
+              <LanguageSwitcher locale={locale} setLocale={setLocale} t={t} />
+            ) : null}
             <ThemeToggle setTheme={setTheme} t={t} theme={theme} />
             <span>{user.name}</span>
             <button type="button" onClick={logout} title={t("auth.logout")}>
@@ -344,6 +383,9 @@ function MemberHubAppContent({ locale, setLocale }) {
           {!loading && data ? (
             <DashboardView
               addLocalRow={addLocalRow}
+              deleteLocalRow={deleteLocalRow}
+              toggleLockRow={toggleLockRow}
+              updateLocalRow={updateLocalRow}
               data={data}
               t={t}
               user={user}
@@ -386,7 +428,6 @@ function RoleEntry({ locale, setLocale, setTheme, t, theme, onSelect }) {
           <h2>{t("app.chooseWorkspace")}</h2>
           <p>{t("app.workspaceCopy")}</p>
           <div className="mh-entry-controls">
-            <LanguageSwitcher locale={locale} setLocale={setLocale} t={t} />
             <ThemeToggle setTheme={setTheme} t={t} theme={theme} />
           </div>
         </div>
@@ -449,7 +490,9 @@ function LoginScreen({ loading, locale, role, status, t, theme, setLocale, setTh
           </button>
         </form>
         <div className="mh-auth-tools">
-          <LanguageSwitcher locale={locale} setLocale={setLocale} t={t} />
+          {role === "customer" ? (
+            <LanguageSwitcher locale={locale} setLocale={setLocale} t={t} />
+          ) : null}
           <ThemeToggle setTheme={setTheme} t={t} theme={theme} />
         </div>
       </section>
@@ -457,11 +500,11 @@ function LoginScreen({ loading, locale, role, status, t, theme, setLocale, setTh
   );
 }
 
-function DashboardView({ addLocalRow, view, user, data, t }) {
+function DashboardView({ addLocalRow, deleteLocalRow, toggleLockRow, updateLocalRow, view, user, data, t }) {
   if (view === "overview") return <Overview data={data} t={t} user={user} />;
   if (view === "reports") return <Reports data={data} t={t} />;
   if (view === "scan") return <ScanView cards={data.cards} t={t} />;
-  if (view === "profile") return <Profile customers={data.customers} t={t} user={user} />;
+  if (view === "profile") return <Profile customers={data.customers} t={t} updateLocalRow={updateLocalRow} user={user} />;
 
   const key = tableMap[view];
   const rows = data[key] || [];
@@ -473,6 +516,10 @@ function DashboardView({ addLocalRow, view, user, data, t }) {
   return (
     <ResourceTable
       addLocalRow={addLocalRow}
+      canWrite={user.role !== "customer" && view !== "logs"}
+      deleteLocalRow={deleteLocalRow}
+      toggleLockRow={toggleLockRow}
+      updateLocalRow={updateLocalRow}
       columns={getColumns(view, t)}
       collection={key}
       rows={rows}
@@ -565,12 +612,14 @@ function Reports({ data, t }) {
   );
 }
 
-function ResourceTable({ addLocalRow, collection, columns, compact = false, rows, t, view }) {
+function ResourceTable({ addLocalRow, canWrite = false, deleteLocalRow, toggleLockRow, updateLocalRow, collection, columns, compact = false, rows, t, view }) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
   const [page, setPage] = useState(1);
-  const [modal, setModal] = useState(false);
+  const [modalMode, setModalMode] = useState("");
+  const [editingRow, setEditingRow] = useState(null);
   const pageSize = compact ? 6 : 8;
+  const editableFields = useMemo(() => getEditableFields(view, t), [t, view]);
 
   const statuses = useMemo(() => ["all", ...new Set(rows.map((row) => row.status).filter(Boolean))], [rows]);
   const filtered = useMemo(() => {
@@ -609,8 +658,11 @@ function ResourceTable({ addLocalRow, collection, columns, compact = false, rows
             <FileText size={17} />
             {t("common.printPdf")}
           </button>
-          {collection && addLocalRow ? (
-            <button className="mh-primary slim" type="button" onClick={() => setModal(true)}>
+          {collection && canWrite && addLocalRow ? (
+            <button className="mh-primary slim" type="button" onClick={() => {
+              setEditingRow(null);
+              setModalMode("add");
+            }}>
               <Plus size={17} />
               {t("common.add")}
             </button>
@@ -623,7 +675,7 @@ function ResourceTable({ addLocalRow, collection, columns, compact = false, rows
           <thead>
             <tr>
               {columns.map((column) => <th key={column.key}>{column.label}</th>)}
-              {!compact ? <th>{t("common.actions")}</th> : null}
+              {!compact && canWrite ? <th>{t("common.actions")}</th> : null}
             </tr>
           </thead>
           <tbody>
@@ -632,11 +684,45 @@ function ResourceTable({ addLocalRow, collection, columns, compact = false, rows
                 {columns.map((column) => (
                   <td key={column.key}>{column.render ? column.render(row) : formatCell(row[column.key])}</td>
                 ))}
-                {!compact ? (
+                {!compact && canWrite ? (
                   <td>
-                    <button className="mh-icon-action" type="button" title={t("common.edit")}>
-                      <Settings size={16} />
-                    </button>
+                    <div className="mh-action-group">
+                      <button
+                        className="mh-icon-action"
+                        type="button"
+                        title={t("common.edit")}
+                        onClick={() => {
+                          setEditingRow(row);
+                          setModalMode("edit");
+                        }}
+                      >
+                        <Settings size={16} />
+                      </button>
+                      {row.status && toggleLockRow ? (
+                        <button
+                          className="mh-icon-action"
+                          type="button"
+                          title={row.status === "locked" ? t("common.unlock") : t("common.lock")}
+                          onClick={() => toggleLockRow(collection, row)}
+                        >
+                          {row.status === "locked" ? <Unlock size={16} /> : <Lock size={16} />}
+                        </button>
+                      ) : null}
+                      {deleteLocalRow ? (
+                        <button
+                          className="mh-icon-action danger"
+                          type="button"
+                          title={t("common.delete")}
+                          onClick={() => {
+                            if (window.confirm(t("common.confirmDelete"))) {
+                              deleteLocalRow(collection, row);
+                            }
+                          }}
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      ) : null}
+                    </div>
                   </td>
                 ) : null}
               </tr>
@@ -657,13 +743,23 @@ function ResourceTable({ addLocalRow, collection, columns, compact = false, rows
         </div>
       ) : null}
 
-      {modal ? (
-        <CreateModal
-          columns={columns}
-          onClose={() => setModal(false)}
-          onSave={(row) => {
-            addLocalRow(collection, row);
-            setModal(false);
+      {modalMode ? (
+        <ResourceModal
+          fields={editableFields}
+          mode={modalMode}
+          row={editingRow}
+          onClose={() => {
+            setEditingRow(null);
+            setModalMode("");
+          }}
+          onSave={async (row) => {
+            if (modalMode === "edit") {
+              await updateLocalRow(collection, row);
+            } else {
+              await addLocalRow(collection, row);
+            }
+            setEditingRow(null);
+            setModalMode("");
           }}
           t={t}
         />
@@ -672,38 +768,92 @@ function ResourceTable({ addLocalRow, collection, columns, compact = false, rows
   );
 }
 
-function CreateModal({ columns, onClose, onSave, t }) {
-  function submit(event) {
+function ResourceModal({ fields, mode, row, onClose, onSave, t }) {
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  async function submit(event) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    const row = {};
-    columns.slice(0, 5).forEach((column) => {
-      row[column.key] = form.get(column.key) || "";
+    const nextRow = { ...(row || {}) };
+    fields.forEach((field) => {
+      if (field.addOnly && mode !== "add") return;
+      const value = form.get(field.key);
+
+      if (field.type === "password" && !value) return;
+      nextRow[field.key] = value ?? "";
     });
-    onSave(row);
+
+    try {
+      setSaving(true);
+      setError("");
+      await onSave(nextRow);
+    } catch (saveError) {
+      setError(saveError.message || "Khong the luu du lieu.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
     <div className="mh-modal-backdrop" role="presentation">
       <section className="mh-modal" role="dialog" aria-modal="true">
         <header>
-          <h2>{t("common.add")}</h2>
+          <h2>{mode === "edit" ? t("common.edit") : t("common.add")}</h2>
           <button type="button" onClick={onClose} title={t("common.cancel")}><X size={18} /></button>
         </header>
         <form className="mh-form" onSubmit={submit}>
-          {columns.slice(0, 5).map((column) => (
-            <label key={column.key}>
-              {column.label}
-              <input name={column.key} placeholder={column.label} />
-            </label>
+          {fields.filter((field) => !field.addOnly || mode === "add").map((field) => (
+            <ModalField field={field} key={field.key} row={row} />
           ))}
+          {error ? <div className="mh-alert">{error}</div> : null}
           <div className="mh-modal-actions">
-            <button className="mh-tool-button" type="button" onClick={onClose}>{t("common.cancel")}</button>
-            <button className="mh-primary slim" type="submit">{t("common.save")}</button>
+            <button className="mh-tool-button" type="button" onClick={onClose} disabled={saving}>{t("common.cancel")}</button>
+            <button className="mh-primary slim" type="submit" disabled={saving}>
+              {saving ? t("common.loading") : t("common.save")}
+            </button>
           </div>
         </form>
       </section>
     </div>
+  );
+}
+
+function ModalField({ field, row }) {
+  const value = row?.[field.key] ?? field.defaultValue ?? "";
+
+  if (field.options?.length) {
+    return (
+      <label>
+        {field.label}
+        <select name={field.key} defaultValue={value}>
+          {field.options.map((option) => (
+            <option key={option.value} value={option.value}>{option.label}</option>
+          ))}
+        </select>
+      </label>
+    );
+  }
+
+  if (field.multiline) {
+    return (
+      <label>
+        {field.label}
+        <textarea name={field.key} placeholder={field.label} defaultValue={value} rows={3} />
+      </label>
+    );
+  }
+
+  return (
+    <label>
+      {field.label}
+      <input
+        name={field.key}
+        placeholder={field.placeholder || field.label}
+        defaultValue={field.type === "password" ? "" : value}
+        type={field.type || "text"}
+      />
+    </label>
   );
 }
 
@@ -764,8 +914,35 @@ function ScanView({ cards, t }) {
   );
 }
 
-function Profile({ customers, t, user }) {
+function Profile({ customers, t, updateLocalRow, user }) {
   const customer = customers[0];
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  async function submit(event) {
+    event.preventDefault();
+    if (!customer) return;
+
+    const form = new FormData(event.currentTarget);
+    try {
+      setSaving(true);
+      setError("");
+      await updateLocalRow("customers", {
+        id: customer.id,
+        name: form.get("name"),
+        email: form.get("email"),
+        phone: form.get("phone"),
+        birthday: form.get("birthday"),
+        address: form.get("address"),
+        notes: form.get("notes")
+      });
+    } catch (profileError) {
+      setError(profileError.message || "Khong the luu ho so.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <section className="mh-card mh-profile">
       <div className="mh-avatar">{user.name?.charAt(0) || "M"}</div>
@@ -777,6 +954,38 @@ function Profile({ customers, t, user }) {
         <span>{t("customer.birthday")}: {customer?.birthday || "-"}</span>
         <span>{t("shop.address")}: {customer?.address || "-"}</span>
       </div>
+      {customer ? (
+        <form className="mh-form" onSubmit={submit}>
+          <label>
+            {t("customer.name")}
+            <input name="name" defaultValue={customer.name || ""} />
+          </label>
+          <label>
+            {t("customer.email")}
+            <input name="email" type="email" defaultValue={customer.email || ""} />
+          </label>
+          <label>
+            {t("customer.phone")}
+            <input name="phone" defaultValue={customer.phone || ""} />
+          </label>
+          <label>
+            {t("customer.birthday")}
+            <input name="birthday" type="date" defaultValue={customer.birthday || ""} />
+          </label>
+          <label>
+            {t("shop.address")}
+            <input name="address" defaultValue={customer.address || ""} />
+          </label>
+          <label>
+            {t("customer.notes")}
+            <textarea name="notes" defaultValue={customer.notes || ""} rows={3} />
+          </label>
+          {error ? <div className="mh-alert">{error}</div> : null}
+          <button className="mh-primary slim" type="submit" disabled={saving}>
+            {saving ? t("common.loading") : t("common.save")}
+          </button>
+        </form>
+      ) : null}
     </section>
   );
 }
@@ -873,7 +1082,7 @@ function getViewTitleKey(view) {
 }
 
 function getColumns(view, t) {
-  const statusColumn = { key: "status", label: t("common.status"), render: (row) => <StatusBadge value={row.status} /> };
+  const statusColumn = { key: "status", label: t("common.status"), render: (row) => <StatusBadge t={t} value={row.status} /> };
   const columns = {
     shops: [
       { key: "name", label: t("shop.name") },
@@ -957,7 +1166,7 @@ function getColumns(view, t) {
     notifications: [
       { key: "title", label: t("nav.notifications") },
       { key: "body", label: t("transaction.note") },
-      { key: "status", label: t("common.status"), render: (row) => <StatusBadge value={row.status} /> },
+      { key: "status", label: t("common.status"), render: (row) => <StatusBadge t={t} value={row.status} /> },
       { key: "created_at", label: t("promotion.dates"), render: (row) => dateText(row.created_at) }
     ],
     settings: [
@@ -969,8 +1178,159 @@ function getColumns(view, t) {
   return columns[view] || columns.customers;
 }
 
-function StatusBadge({ value }) {
-  return <span className={`mh-status ${value || "active"}`}>{value || "active"}</span>;
+function getEditableFields(view, t) {
+  const idLabel = (label) => `${label} ${t("common.identifier")}`;
+  const statusOptions = {
+    activeLocked: [
+      { value: "active", label: t("common.active") },
+      { value: "locked", label: t("common.locked") }
+    ],
+    activeInactive: [
+      { value: "active", label: t("common.active") },
+      { value: "inactive", label: t("common.inactive") }
+    ],
+    notifications: [
+      { value: "unread", label: t("common.unread") },
+      { value: "read", label: t("common.read") }
+    ]
+  };
+
+  const fields = {
+    shops: [
+      { key: "name", label: t("shop.name") },
+      { key: "owner_id", label: idLabel(t("shop.owner")), type: "number" },
+      { key: "phone", label: t("shop.phone") },
+      { key: "email", label: t("shop.email"), type: "email" },
+      { key: "address", label: t("shop.address") },
+      { key: "description", label: t("service.description"), multiline: true },
+      { key: "status", label: t("common.status"), defaultValue: "active", options: statusOptions.activeLocked }
+    ],
+    shop: [
+      { key: "name", label: t("shop.name") },
+      { key: "phone", label: t("shop.phone") },
+      { key: "email", label: t("shop.email"), type: "email" },
+      { key: "address", label: t("shop.address") },
+      { key: "description", label: t("service.description"), multiline: true },
+      { key: "status", label: t("common.status"), defaultValue: "active", options: statusOptions.activeLocked }
+    ],
+    users: [
+      { key: "name", label: t("customer.name") },
+      { key: "email", label: t("customer.email"), type: "email" },
+      { key: "role", label: t("common.role"), defaultValue: "owner", options: [
+        { value: "owner", label: t("app.owner") },
+        { value: "customer", label: t("app.customer") },
+        { value: "admin", label: t("app.admin") }
+      ] },
+      { key: "phone", label: t("customer.phone") },
+      { key: "password", label: t("auth.password"), type: "password", placeholder: "Owner@123" },
+      { key: "status", label: t("common.status"), defaultValue: "active", options: statusOptions.activeLocked }
+    ],
+    customers: [
+      { key: "shop_id", label: idLabel(t("shop.name")), type: "number" },
+      { key: "name", label: t("customer.name") },
+      { key: "email", label: t("customer.email"), type: "email" },
+      { key: "phone", label: t("customer.phone") },
+      { key: "birthday", label: t("customer.birthday"), type: "date" },
+      { key: "gender", label: t("customer.gender"), options: [
+        { value: "", label: "-" },
+        { value: "female", label: t("common.female") },
+        { value: "male", label: t("common.male") },
+        { value: "other", label: t("common.other") }
+      ] },
+      { key: "notes", label: t("customer.notes"), multiline: true },
+      { key: "status", label: t("common.status"), defaultValue: "active", options: statusOptions.activeLocked }
+    ],
+    services: [
+      { key: "shop_id", label: idLabel(t("shop.name")), type: "number" },
+      { key: "name", label: t("service.name") },
+      { key: "price", label: t("service.price"), type: "number" },
+      { key: "duration_minutes", label: t("service.duration"), type: "number" },
+      { key: "description", label: t("service.description"), multiline: true },
+      { key: "status", label: t("common.status"), defaultValue: "active", options: statusOptions.activeInactive }
+    ],
+    cards: [
+      { key: "shop_id", label: idLabel(t("shop.name")), type: "number" },
+      { key: "customer_id", label: idLabel(t("customer.name")), type: "number" },
+      { key: "card_number", label: t("card.number") },
+      { key: "points", label: t("common.points"), type: "number" },
+      { key: "tier", label: t("card.tier"), defaultValue: "Silver", options: [
+        { value: "Silver", label: "Silver" },
+        { value: "Gold", label: "Gold" },
+        { value: "Platinum", label: "Platinum" },
+        { value: "Diamond", label: "Diamond" }
+      ] },
+      { key: "total_spend", label: t("card.spend"), type: "number" },
+      { key: "expires_at", label: t("card.expires"), type: "date" },
+      { key: "status", label: t("common.status"), defaultValue: "active", options: [
+        ...statusOptions.activeLocked,
+        { value: "expired", label: t("common.expired") }
+      ] }
+    ],
+    levels: [
+      { key: "shop_id", label: idLabel(t("shop.name")), type: "number" },
+      { key: "name", label: t("level.name") },
+      { key: "min_points", label: t("common.points"), type: "number" },
+      { key: "min_spend", label: t("card.spend"), type: "number" },
+      { key: "discount_percent", label: t("level.discount"), type: "number" },
+      { key: "benefits", label: t("level.benefits"), multiline: true },
+      { key: "status", label: t("common.status"), defaultValue: "active", options: statusOptions.activeInactive }
+    ],
+    transactions: [
+      { key: "shop_id", label: idLabel(t("shop.name")), type: "number" },
+      { key: "customer_id", label: idLabel(t("customer.name")), type: "number" },
+      { key: "service_id", label: idLabel(t("service.name")), type: "number" },
+      { key: "price", label: t("service.price"), type: "number" },
+      { key: "discount", label: t("transaction.discount"), type: "number" },
+      { key: "tax", label: t("transaction.tax"), type: "number" },
+      { key: "amount", label: t("transaction.total"), type: "number" },
+      { key: "points_delta", label: t("transaction.points"), type: "number" },
+      { key: "note", label: t("transaction.note"), multiline: true }
+    ],
+    promotions: [
+      { key: "shop_id", label: idLabel(t("shop.name")), type: "number" },
+      { key: "service_id", label: idLabel(t("service.name")), type: "number" },
+      { key: "title", label: t("promotion.title") },
+      { key: "description", label: t("service.description"), multiline: true },
+      { key: "type", label: t("promotion.type"), defaultValue: "percent", options: [
+        { value: "percent", label: "%" },
+        { value: "amount", label: t("transaction.total") }
+      ] },
+      { key: "discount_percent", label: t("level.discount"), type: "number" },
+      { key: "discount_amount", label: t("promotion.value"), type: "number" },
+      { key: "start_date", label: t("promotion.dates"), type: "date" },
+      { key: "end_date", label: t("card.expires"), type: "date" },
+      { key: "status", label: t("common.status"), defaultValue: "active", options: statusOptions.activeInactive }
+    ],
+    notifications: [
+      { key: "shop_id", label: idLabel(t("shop.name")), type: "number" },
+      { key: "user_id", label: idLabel(t("customer.name")), type: "number" },
+      { key: "title", label: t("nav.notifications") },
+      { key: "body", label: t("transaction.note"), multiline: true },
+      { key: "status", label: t("common.status"), defaultValue: "unread", options: statusOptions.notifications }
+    ],
+    settings: [
+      { key: "shop_id", label: idLabel(t("shop.name")), type: "number" },
+      { key: "key", label: t("nav.settings") },
+      { key: "value", label: t("service.description"), multiline: true }
+    ],
+    logs: []
+  };
+
+  return fields[view] || fields.customers;
+}
+
+function StatusBadge({ t, value }) {
+  const status = value || "active";
+  const label = {
+    active: t("common.active"),
+    inactive: t("common.inactive"),
+    locked: t("common.locked"),
+    expired: t("common.expired"),
+    read: t("common.read"),
+    unread: t("common.unread")
+  }[status] || status;
+
+  return <span className={`mh-status ${status}`}>{label}</span>;
 }
 
 function formatCell(value) {
