@@ -40,7 +40,7 @@ import { getMessagesForLocale } from "@/lib/memberhub/i18n";
 import { createTranslator, locales } from "@/messages/memberhub";
 
 const credentials = {
-  admin: ["admin@example.com", "Admin@123"]
+  admin: ["", ""]
 };
 
 const navItems = {
@@ -572,6 +572,9 @@ function ResourceTable({ addLocalRow, canWrite = false, deleteLocalRow, toggleLo
   const [editingRow, setEditingRow] = useState(null);
   const pageSize = compact ? 6 : 8;
   const editableFields = useMemo(() => getEditableFields(view, t), [t, view]);
+  const modalFields = editingRow?.role === "admin" && view === "users"
+    ? [{ key: "password", label: t("auth.newPassword"), type: "password", required: true }]
+    : editableFields;
 
   const statuses = useMemo(() => ["all", ...new Set(rows.map((row) => row.status).filter(Boolean))], [rows]);
   const filtered = useMemo(() => {
@@ -632,52 +635,19 @@ function ResourceTable({ addLocalRow, canWrite = false, deleteLocalRow, toggleLo
           </thead>
           <tbody>
             {visible.map((row) => (
-              <tr key={row.id}>
-                {columns.map((column) => (
-                  <td key={column.key}>{column.render ? column.render(row) : formatCell(row[column.key])}</td>
-                ))}
-                {!compact && canWrite ? (
-                  <td>
-                    <div className="mh-action-group">
-                      <button
-                        className="mh-icon-action"
-                        type="button"
-                        title={t("common.edit")}
-                        onClick={() => {
-                          setEditingRow(row);
-                          setModalMode("edit");
-                        }}
-                      >
-                        <Settings size={16} />
-                      </button>
-                      {row.status && toggleLockRow ? (
-                        <button
-                          className="mh-icon-action"
-                          type="button"
-                          title={row.status === "locked" ? t("common.unlock") : t("common.lock")}
-                          onClick={() => toggleLockRow(collection, row)}
-                        >
-                          {row.status === "locked" ? <Unlock size={16} /> : <Lock size={16} />}
-                        </button>
-                      ) : null}
-                      {deleteLocalRow ? (
-                        <button
-                          className="mh-icon-action danger"
-                          type="button"
-                          title={t("common.delete")}
-                          onClick={() => {
-                            if (window.confirm(t("common.confirmDelete"))) {
-                              deleteLocalRow(collection, row);
-                            }
-                          }}
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      ) : null}
-                    </div>
-                  </td>
-                ) : null}
-              </tr>
+              <TableRow
+                canWrite={canWrite}
+                collection={collection}
+                columns={columns}
+                compact={compact}
+                deleteLocalRow={deleteLocalRow}
+                key={row.id}
+                row={row}
+                setEditingRow={setEditingRow}
+                setModalMode={setModalMode}
+                t={t}
+                toggleLockRow={toggleLockRow}
+              />
             ))}
           </tbody>
         </table>
@@ -697,9 +667,10 @@ function ResourceTable({ addLocalRow, canWrite = false, deleteLocalRow, toggleLo
 
       {modalMode ? (
         <ResourceModal
-          fields={editableFields}
+          fields={modalFields}
           mode={modalMode}
           row={editingRow}
+          title={editingRow?.role === "admin" && view === "users" ? t("auth.changePassword") : null}
           onClose={() => {
             setEditingRow(null);
             setModalMode("");
@@ -720,7 +691,7 @@ function ResourceTable({ addLocalRow, canWrite = false, deleteLocalRow, toggleLo
   );
 }
 
-function ResourceModal({ fields, mode, row, onClose, onSave, t }) {
+function ResourceModal({ fields, mode, row, title, onClose, onSave, t }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -751,7 +722,7 @@ function ResourceModal({ fields, mode, row, onClose, onSave, t }) {
     <div className="mh-modal-backdrop" role="presentation">
       <section className="mh-modal" role="dialog" aria-modal="true">
         <header>
-          <h2>{mode === "edit" ? t("common.edit") : t("common.add")}</h2>
+          <h2>{title || (mode === "edit" ? t("common.edit") : t("common.add"))}</h2>
           <button type="button" onClick={onClose} title={t("common.cancel")}><X size={18} /></button>
         </header>
         <form className="mh-form" onSubmit={submit}>
@@ -768,6 +739,59 @@ function ResourceModal({ fields, mode, row, onClose, onSave, t }) {
         </form>
       </section>
     </div>
+  );
+}
+
+function TableRow({ canWrite, collection, columns, compact, deleteLocalRow, row, setEditingRow, setModalMode, t, toggleLockRow }) {
+  const protectedAdmin = collection === "users" && row.role === "admin";
+
+  return (
+    <tr>
+      {columns.map((column) => (
+        <td key={column.key}>{column.render ? column.render(row) : formatCell(row[column.key])}</td>
+      ))}
+      {!compact && canWrite ? (
+        <td>
+          <div className="mh-action-group">
+            <button
+              className="mh-icon-action"
+              type="button"
+              title={protectedAdmin ? t("auth.changePassword") : t("common.edit")}
+              onClick={() => {
+                setEditingRow(row);
+                setModalMode("edit");
+              }}
+            >
+              {protectedAdmin ? <Lock size={16} /> : <Settings size={16} />}
+            </button>
+            {!protectedAdmin && row.status && toggleLockRow ? (
+              <button
+                className="mh-icon-action"
+                type="button"
+                title={row.status === "locked" ? t("common.unlock") : t("common.lock")}
+                onClick={() => toggleLockRow(collection, row)}
+              >
+                {row.status === "locked" ? <Unlock size={16} /> : <Lock size={16} />}
+              </button>
+            ) : null}
+            {!protectedAdmin && deleteLocalRow ? (
+              <button
+                className="mh-icon-action danger"
+                type="button"
+                title={t("common.delete")}
+                onClick={() => {
+                  if (window.confirm(t("common.confirmDelete"))) {
+                    deleteLocalRow(collection, row);
+                  }
+                }}
+              >
+                <Trash2 size={16} />
+              </button>
+            ) : null}
+          </div>
+        </td>
+      ) : null}
+    </tr>
   );
 }
 
@@ -803,6 +827,7 @@ function ModalField({ field, row }) {
         name={field.key}
         placeholder={field.placeholder || field.label}
         defaultValue={field.type === "password" ? "" : value}
+        required={field.required || false}
         type={field.type || "text"}
       />
     </label>
@@ -1226,8 +1251,7 @@ function getEditableFields(view, t) {
       { key: "email", label: t("customer.email"), type: "email" },
       { key: "role", label: t("common.role"), defaultValue: "owner", options: [
         { value: "owner", label: t("app.owner") },
-        { value: "customer", label: t("app.customer") },
-        { value: "admin", label: t("app.admin") }
+        { value: "customer", label: t("app.customer") }
       ] },
       { key: "phone", label: t("customer.phone") },
       { key: "password", label: t("auth.password"), type: "password", placeholder: "Owner@123" },

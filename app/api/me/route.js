@@ -12,9 +12,6 @@ export async function GET(request) {
 
   return NextResponse.json({
     demo: auth.demo || false,
-    user: publicUser(auth.user),
-    defaults: {
-      admin: { email: "admin@example.com", password: "Admin@123" }
-    }
+    user: publicUser(auth.user)
   });
 }

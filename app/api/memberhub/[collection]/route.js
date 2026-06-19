@@ -248,14 +248,14 @@ async function applyTransactionToCard(supabase, transaction, previous = null) {
   }
 }
 
-function prepareUserPayload(body, payload) {
-  const role = payload.role || "owner";
+function prepareUserPayload(body, payload, mode) {
   const password = String(body.password || "").trim();
-  const nextPayload = {
-    ...payload,
-    role,
-    status: payload.status || "active"
-  };
+  const nextPayload = { ...payload };
+
+  if (mode === "post") {
+    nextPayload.role = payload.role || "owner";
+    nextPayload.status = payload.status || "active";
+  }
 
   if (password) {
     Object.assign(nextPayload, hashPassword(password));
@@ -369,7 +369,34 @@ async function writeResource(request, params, mode) {
       return NextResponse.json({ error: "Chi admin moi co quyen quan ly nguoi dung" }, { status: 403 });
     }
 
-    const userPayload = prepareUserPayload(body, payload);
+    if (mode === "post" && payload.role === "admin") {
+      return NextResponse.json({ error: "Khong the tao them tai khoan admin tu man hinh nay" }, { status: 403 });
+    }
+
+    if (mode === "patch") {
+      const { data: targetUser, error: targetError } = await supabase
+        .from("member_users")
+        .select("id,role")
+        .eq("id", id)
+        .maybeSingle();
+
+      if (targetError || !targetUser) {
+        return NextResponse.json({ error: "Tai khoan khong ton tai" }, { status: 404 });
+      }
+
+      if (targetUser.role === "admin") {
+        const password = String(body.password || "").trim();
+
+        if (!password) {
+          return NextResponse.json({ error: "Tai khoan admin chi duoc doi mat khau" }, { status: 403 });
+        }
+
+        Object.keys(payload).forEach((key) => delete payload[key]);
+        Object.assign(payload, hashPassword(password));
+      }
+    }
+
+    const userPayload = prepareUserPayload(body, payload, mode);
     if (mode === "post" && !userPayload.password_hash) {
       Object.assign(userPayload, hashPassword("Owner@123"));
     }
@@ -437,6 +464,22 @@ async function deleteResource(request, params) {
   const permission = await assertCanWrite(supabase, auth.user, config, {}, id);
   if (permission.error) {
     return NextResponse.json({ error: permission.error }, { status: permission.status });
+  }
+
+  if (collection === "users") {
+    const { data: targetUser, error: targetError } = await supabase
+      .from("member_users")
+      .select("id,role")
+      .eq("id", id)
+      .maybeSingle();
+
+    if (targetError || !targetUser) {
+      return NextResponse.json({ error: "Tai khoan khong ton tai" }, { status: 404 });
+    }
+
+    if (targetUser.role === "admin") {
+      return NextResponse.json({ error: "Khong the xoa tai khoan admin" }, { status: 403 });
+    }
   }
 
   let previousTransaction = null;
