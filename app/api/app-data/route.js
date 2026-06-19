@@ -83,6 +83,7 @@ function shapeData(data) {
   return {
     shops: data.shops.map((shop) => ({
       ...shop,
+      store_url: shop.slug ? `/${shop.slug}` : "",
       owner_name: [
         userMap.get(shop.owner_id)?.name,
         ...(data.storeUsers || [])
@@ -93,12 +94,18 @@ function shapeData(data) {
     storeUsers: (data.storeUsers || []).map((item) => ({
       ...item,
       shop_name: shopMap.get(item.store_id)?.name || "",
-      user_name: userMap.get(item.user_id)?.name || ""
+      shop_slug: shopMap.get(item.store_id)?.slug || "",
+      user_name: userMap.get(item.user_id)?.name || "",
+      user_email: userMap.get(item.user_id)?.email || ""
     })),
     users: data.users.map((user) => ({ ...user, role: normalizeRole(user.role) })),
     customers: data.customers.map((customer) => ({
       ...customer,
-      shop_name: shopMap.get(customer.shop_id)?.name || ""
+      shop_name: shopMap.get(customer.shop_id)?.name || "",
+      shop_slug: shopMap.get(customer.shop_id)?.slug || "",
+      customer_url: shopMap.get(customer.shop_id)?.slug && customer.slug
+        ? `/${shopMap.get(customer.shop_id).slug}/${customer.slug}`
+        : ""
     })),
     services: data.services.map((service) => ({
       ...service,

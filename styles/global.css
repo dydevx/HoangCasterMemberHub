@@ -1596,6 +1596,13 @@ code {
   color: var(--mh-danger);
 }
 
+.mh-inline-link {
+  color: var(--mh-brand);
+  font-weight: 900;
+  text-decoration: underline;
+  text-underline-offset: 0.18rem;
+}
+
 .mh-pagination {
   justify-content: space-between;
 }

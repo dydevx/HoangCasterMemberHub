@@ -505,8 +505,9 @@ function DashboardView({ addLocalRow, deleteLocalRow, toggleLockRow, updateLocal
       deleteLocalRow={deleteLocalRow}
       toggleLockRow={toggleLockRow}
       updateLocalRow={updateLocalRow}
-      columns={getColumns(view, t)}
+      columns={getColumns(view, t, data)}
       collection={key}
+      data={data}
       rows={rows}
       t={t}
       view={view}
@@ -541,8 +542,9 @@ function Overview({ data, t, user }) {
       <section className="mh-card">
         <PanelTitle icon={ReceiptText} title={t("dashboard.recentTransactions")} />
         <ResourceTable
-          columns={getColumns("transactions", t)}
+          columns={getColumns("transactions", t, data)}
           compact
+          data={data}
           rows={data.transactions.slice(0, 6)}
           t={t}
           view="transactions"
@@ -573,21 +575,21 @@ function Reports({ data, t }) {
         </section>
         <section className="mh-card">
           <PanelTitle icon={ReceiptText} title={t("reports.topRevenue")} />
-          <ResourceTable compact columns={getColumns("transactions", t)} rows={data.transactions} t={t} view="transactions" />
+          <ResourceTable compact columns={getColumns("transactions", t, data)} data={data} rows={data.transactions} t={t} view="transactions" />
         </section>
       </div>
     </>
   );
 }
 
-function ResourceTable({ addLocalRow, canWrite = false, deleteLocalRow, toggleLockRow, updateLocalRow, collection, columns, compact = false, rows, t, view }) {
+function ResourceTable({ addLocalRow, canWrite = false, data, deleteLocalRow, toggleLockRow, updateLocalRow, collection, columns, compact = false, rows, t, view }) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
   const [page, setPage] = useState(1);
   const [modalMode, setModalMode] = useState("");
   const [editingRow, setEditingRow] = useState(null);
   const pageSize = compact ? 6 : 8;
-  const editableFields = useMemo(() => getEditableFields(view, t), [t, view]);
+  const editableFields = useMemo(() => getEditableFields(view, t, data), [data, t, view]);
   const modalFields = isSuperAdmin(editingRow) && view === "users"
     ? [{ key: "password", label: t("auth.newPassword"), type: "password", required: true }]
     : editableFields;
@@ -818,7 +820,8 @@ function ModalField({ field, row }) {
     return (
       <label>
         {field.label}
-        <select name={field.key} defaultValue={value}>
+        <select name={field.key} defaultValue={value} required={field.required || false}>
+          {!field.required ? <option value="">-</option> : null}
           {field.options.map((option) => (
             <option key={option.value} value={option.value}>{option.label}</option>
           ))}
@@ -1131,11 +1134,21 @@ function getViewTitleKey(view) {
   }[view] || "nav.overview";
 }
 
-function getColumns(view, t) {
+function getColumns(view, t, data = {}) {
   const statusColumn = { key: "status", label: t("common.status"), render: (row) => <StatusBadge t={t} value={row.status} /> };
+  const linkColumn = (key, label) => ({
+    key,
+    label,
+    render: (row) => row[key] ? (
+      <a className="mh-inline-link" href={row[key]} target="_blank" rel="noreferrer">
+        {t("common.open")}
+      </a>
+    ) : "-"
+  });
   const columns = {
     shops: [
       { key: "name", label: t("shop.name") },
+      linkColumn("store_url", t("common.link")),
       { key: "owner_name", label: t("shop.owner") },
       { key: "phone", label: t("shop.phone") },
       { key: "email", label: t("shop.email") },
@@ -1144,6 +1157,7 @@ function getColumns(view, t) {
     ],
     shop: [
       { key: "name", label: t("shop.name") },
+      linkColumn("store_url", t("common.link")),
       { key: "owner_name", label: t("shop.owner") },
       { key: "phone", label: t("shop.phone") },
       { key: "email", label: t("shop.email") },
@@ -1153,6 +1167,7 @@ function getColumns(view, t) {
     storeUsers: [
       { key: "shop_name", label: t("shop.name") },
       { key: "user_name", label: t("shop.owner") },
+      { key: "user_email", label: t("customer.email") },
       { key: "role", label: t("common.role") },
       { key: "created_at", label: t("promotion.dates"), render: (row) => dateText(row.created_at) }
     ],
@@ -1165,6 +1180,7 @@ function getColumns(view, t) {
     ],
     customers: [
       { key: "name", label: t("customer.name") },
+      linkColumn("customer_url", t("common.link")),
       { key: "shop_name", label: t("shop.name") },
       { key: "email", label: t("customer.email") },
       { key: "phone", label: t("customer.phone") },
@@ -1234,8 +1250,16 @@ function getColumns(view, t) {
   return columns[view] || columns.customers;
 }
 
-function getEditableFields(view, t) {
+function getEditableFields(view, t, data = {}) {
   const idLabel = (label) => `${label} ${t("common.identifier")}`;
+  const shopOptions = optionList(data.shops, "id", (item) => `${item.name} #${item.id}`);
+  const ownerOptions = optionList(
+    (data.users || []).filter((user) => normalizeRole(user.role) !== "customer"),
+    "id",
+    (item) => `${item.name} - ${item.email}`
+  );
+  const customerOptions = optionList(data.customers, "id", (item) => `${item.name} #${item.id}`);
+  const serviceOptions = optionList(data.services, "id", (item) => `${item.name} #${item.id}`);
   const statusOptions = {
     activeLocked: [
       { value: "active", label: t("common.active") },
@@ -1254,7 +1278,7 @@ function getEditableFields(view, t) {
   const fields = {
     shops: [
       { key: "name", label: t("shop.name") },
-      { key: "owner_id", label: idLabel(t("shop.owner")), type: "number" },
+      { key: "owner_id", label: idLabel(t("shop.owner")), type: "number", options: ownerOptions },
       { key: "phone", label: t("shop.phone") },
       { key: "email", label: t("shop.email"), type: "email" },
       { key: "address", label: t("shop.address") },
@@ -1270,8 +1294,8 @@ function getEditableFields(view, t) {
       { key: "status", label: t("common.status"), defaultValue: "active", options: statusOptions.activeLocked }
     ],
     storeUsers: [
-      { key: "store_id", label: idLabel(t("shop.name")), type: "number", required: true },
-      { key: "user_id", label: idLabel(t("shop.owner")), type: "number", required: true },
+      { key: "store_id", label: t("shop.name"), type: "number", required: true, options: shopOptions },
+      { key: "user_id", label: t("shop.owner"), type: "number", required: true, options: ownerOptions },
       { key: "role", label: t("common.role"), defaultValue: "store_owner", options: [
         { value: "store_owner", label: t("app.owner") }
       ] }
@@ -1288,7 +1312,7 @@ function getEditableFields(view, t) {
       { key: "status", label: t("common.status"), defaultValue: "active", options: statusOptions.activeLocked }
     ],
     customers: [
-      { key: "shop_id", label: idLabel(t("shop.name")), type: "number" },
+      { key: "shop_id", label: t("shop.name"), type: "number", options: shopOptions },
       { key: "name", label: t("customer.name") },
       { key: "email", label: t("customer.email"), type: "email" },
       { key: "password", label: t("auth.password"), type: "password", addOnly: true, placeholder: "Customer@123" },
@@ -1304,7 +1328,7 @@ function getEditableFields(view, t) {
       { key: "status", label: t("common.status"), defaultValue: "active", options: statusOptions.activeLocked }
     ],
     services: [
-      { key: "shop_id", label: idLabel(t("shop.name")), type: "number" },
+      { key: "shop_id", label: t("shop.name"), type: "number", options: shopOptions },
       { key: "name", label: t("service.name") },
       { key: "price", label: t("service.price"), type: "number" },
       { key: "duration_minutes", label: t("service.duration"), type: "number" },
@@ -1312,8 +1336,8 @@ function getEditableFields(view, t) {
       { key: "status", label: t("common.status"), defaultValue: "active", options: statusOptions.activeInactive }
     ],
     cards: [
-      { key: "shop_id", label: idLabel(t("shop.name")), type: "number" },
-      { key: "customer_id", label: idLabel(t("customer.name")), type: "number" },
+      { key: "shop_id", label: t("shop.name"), type: "number", options: shopOptions },
+      { key: "customer_id", label: t("customer.name"), type: "number", options: customerOptions },
       { key: "card_number", label: t("card.number") },
       { key: "points", label: t("common.points"), type: "number" },
       { key: "tier", label: t("card.tier"), defaultValue: "Silver", options: [
@@ -1330,7 +1354,7 @@ function getEditableFields(view, t) {
       ] }
     ],
     levels: [
-      { key: "shop_id", label: idLabel(t("shop.name")), type: "number" },
+      { key: "shop_id", label: t("shop.name"), type: "number", options: shopOptions },
       { key: "name", label: t("level.name") },
       { key: "min_points", label: t("common.points"), type: "number" },
       { key: "min_spend", label: t("card.spend"), type: "number" },
@@ -1339,9 +1363,9 @@ function getEditableFields(view, t) {
       { key: "status", label: t("common.status"), defaultValue: "active", options: statusOptions.activeInactive }
     ],
     transactions: [
-      { key: "shop_id", label: idLabel(t("shop.name")), type: "number" },
-      { key: "customer_id", label: idLabel(t("customer.name")), type: "number" },
-      { key: "service_id", label: idLabel(t("service.name")), type: "number" },
+      { key: "shop_id", label: t("shop.name"), type: "number", options: shopOptions },
+      { key: "customer_id", label: t("customer.name"), type: "number", options: customerOptions },
+      { key: "service_id", label: t("service.name"), type: "number", options: serviceOptions },
       { key: "price", label: t("service.price"), type: "number" },
       { key: "discount", label: t("transaction.discount"), type: "number" },
       { key: "tax", label: t("transaction.tax"), type: "number" },
@@ -1350,8 +1374,8 @@ function getEditableFields(view, t) {
       { key: "note", label: t("transaction.note"), multiline: true }
     ],
     promotions: [
-      { key: "shop_id", label: idLabel(t("shop.name")), type: "number" },
-      { key: "service_id", label: idLabel(t("service.name")), type: "number" },
+      { key: "shop_id", label: t("shop.name"), type: "number", options: shopOptions },
+      { key: "service_id", label: t("service.name"), type: "number", options: serviceOptions },
       { key: "title", label: t("promotion.title") },
       { key: "description", label: t("service.description"), multiline: true },
       { key: "type", label: t("promotion.type"), defaultValue: "percent", options: [
@@ -1365,14 +1389,14 @@ function getEditableFields(view, t) {
       { key: "status", label: t("common.status"), defaultValue: "active", options: statusOptions.activeInactive }
     ],
     notifications: [
-      { key: "shop_id", label: idLabel(t("shop.name")), type: "number" },
-      { key: "user_id", label: idLabel(t("customer.name")), type: "number" },
+      { key: "shop_id", label: t("shop.name"), type: "number", options: shopOptions },
+      { key: "user_id", label: t("customer.name"), type: "number", options: optionList(data.users, "id", (item) => `${item.name} - ${item.email}`) },
       { key: "title", label: t("nav.notifications") },
       { key: "body", label: t("transaction.note"), multiline: true },
       { key: "status", label: t("common.status"), defaultValue: "unread", options: statusOptions.notifications }
     ],
     settings: [
-      { key: "shop_id", label: idLabel(t("shop.name")), type: "number" },
+      { key: "shop_id", label: t("shop.name"), type: "number", options: shopOptions },
       { key: "key", label: t("nav.settings") },
       { key: "value", label: t("service.description"), multiline: true }
     ],
@@ -1394,6 +1418,13 @@ function StatusBadge({ t, value }) {
   }[status] || status;
 
   return <span className={`mh-status ${status}`}>{label}</span>;
+}
+
+function optionList(rows = [], valueKey, labelFor) {
+  return rows.map((row) => ({
+    value: String(row[valueKey] ?? ""),
+    label: labelFor(row)
+  }));
 }
 
 function formatCell(value) {
