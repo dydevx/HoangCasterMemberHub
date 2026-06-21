@@ -441,7 +441,7 @@ function MemberHubAppContent({ locale, setLocale }) {
 function Brand({ t, role }) {
   return (
     <div className="mh-brand">
-      <span className="mh-mark">M</span>
+      <LogoMark />
       <div>
         <strong>{t("app.name")}</strong>
         <span>{t(roleKeys[role] || "app.tagline")}</span>
@@ -455,7 +455,7 @@ function LoginScreen({ loading, locale, status, t, theme, setLocale, setTheme, o
     <main className="mh-auth">
       <section className="mh-auth-panel">
         <div className="mh-auth-brand">
-          <span className="mh-mark">M</span>
+          <LogoMark />
           <div>
             <p>{t("app.name")}</p>
             <h1>{t("auth.login")}</h1>
@@ -489,6 +489,10 @@ function LoginScreen({ loading, locale, status, t, theme, setLocale, setTheme, o
       </section>
     </main>
   );
+}
+
+function LogoMark() {
+  return <img className="mh-logo" src="/assets/logo.png" alt="" aria-hidden="true" />;
 }
 
 function DashboardView({ addLocalRow, deleteLocalRow, toggleLockRow, updateLocalRow, view, user, data, t }) {

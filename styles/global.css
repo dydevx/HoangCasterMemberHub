@@ -1911,7 +1911,7 @@ code {
   --mh-danger: #c2415b;
   --mh-shadow: 0 18px 54px rgba(23, 35, 30, 0.1);
   --mh-shadow-strong: 0 30px 90px rgba(23, 35, 30, 0.18);
-  --mh-auth-image: url("/assets/memberhub-auth-bg.png");
+  --mh-auth-image: url("/assets/background.png");
 }
 
 :root[data-theme="dark"] {
@@ -2004,6 +2004,17 @@ code {
     radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.38), transparent 28%),
     linear-gradient(135deg, var(--mh-brand), var(--mh-accent));
   box-shadow: 0 12px 28px color-mix(in srgb, var(--mh-brand) 28%, transparent);
+}
+
+.mh-logo {
+  background: color-mix(in srgb, var(--mh-panel-solid) 78%, transparent);
+  border-radius: 8px;
+  box-shadow: 0 12px 28px color-mix(in srgb, var(--mh-brand) 18%, transparent);
+  display: block;
+  flex: 0 0 auto;
+  height: 2.7rem;
+  object-fit: cover;
+  width: 2.7rem;
 }
 
 .mh-form input,
