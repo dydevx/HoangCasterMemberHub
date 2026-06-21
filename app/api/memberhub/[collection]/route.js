@@ -327,6 +327,95 @@ async function memberUserExists(supabase, userId) {
   return !error && Boolean(data?.id);
 }
 
+function customerEmail(payload, id = null) {
+  const email = String(payload.email || "").trim().toLowerCase();
+  if (email) return email;
+  return id ? `customer-${id}@memberhub.local` : "";
+}
+
+async function ensureCustomerUser(supabase, payload, body) {
+  if (payload.user_id) {
+    const hasUser = await memberUserExists(supabase, payload.user_id);
+    if (!hasUser) {
+      return { error: "Tai khoan khach hang khong ton tai", status: 400 };
+    }
+    return {};
+  }
+
+  const email = customerEmail(payload);
+  if (!email) {
+    return { error: "Khach hang can email de tao tai khoan dang nhap", status: 400 };
+  }
+
+  payload.email = email;
+  const { data: existingUser, error: existingUserError } = await supabase
+    .from("member_users")
+    .select("id,role")
+    .eq("email", email)
+    .maybeSingle();
+
+  if (existingUserError) {
+    return { error: existingUserError.message, status: 400 };
+  }
+
+  if (existingUser?.id) {
+    if (!isCustomer(existingUser.role)) {
+      return { error: "Email nay dang thuoc tai khoan khong phai khach hang", status: 400 };
+    }
+
+    payload.user_id = existingUser.id;
+    return {};
+  }
+
+  const passwordPayload = hashPassword(String(body.password || "").trim() || "Customer@123");
+  const { data: customerUser, error: customerUserError } = await supabase
+    .from("member_users")
+    .insert({
+      name: payload.name || email,
+      email,
+      role: "customer",
+      status: payload.status || "active",
+      phone: payload.phone || null,
+      ...passwordPayload
+    })
+    .select("id")
+    .single();
+
+  if (customerUserError) {
+    return { error: customerUserError.message, status: 400 };
+  }
+
+  payload.user_id = customerUser.id;
+  return {};
+}
+
+async function syncCustomerUser(supabase, customer, payload) {
+  if (!customer?.user_id) return {};
+
+  const updatePayload = {};
+  if (payload.name !== undefined) updatePayload.name = payload.name;
+  if (payload.email !== undefined) {
+    payload.email = customerEmail(payload, customer.id);
+    updatePayload.email = payload.email;
+  }
+  if (payload.phone !== undefined) updatePayload.phone = payload.phone;
+  if (payload.status !== undefined) updatePayload.status = payload.status;
+
+  if (!Object.keys(updatePayload).length) return {};
+
+  const { error } = await supabase
+    .from("member_users")
+    .update(updatePayload)
+    .eq("id", customer.user_id)
+    .eq("role", "customer");
+
+  if (error) {
+    return { error: error.message, status: 400 };
+  }
+
+  return {};
+}
+
 async function writeResource(request, params, mode) {
   const supabase = createSupabaseServerClient({ useServiceRole: true });
 
@@ -442,43 +531,27 @@ async function writeResource(request, params, mode) {
     payload.role = normalizeRole(payload.role || "store_owner");
   }
 
-  if (collection === "customers" && mode === "post" && payload.user_id) {
-    const hasUser = await memberUserExists(supabase, payload.user_id);
-    if (!hasUser) {
-      delete payload.user_id;
+  if (collection === "customers" && mode === "post") {
+    const account = await ensureCustomerUser(supabase, payload, body);
+    if (account.error) {
+      return NextResponse.json({ error: account.error }, { status: account.status });
     }
   }
 
-  if (collection === "customers" && mode === "post" && !payload.user_id && payload.email) {
-    const email = String(payload.email || "").trim().toLowerCase();
-    const { data: existingUser } = await supabase
-      .from("member_users")
-      .select("id")
-      .eq("email", email)
+  if (collection === "customers" && mode === "patch") {
+    const { data: customer, error: customerError } = await supabase
+      .from("customers")
+      .select("id,user_id")
+      .eq("id", id)
       .maybeSingle();
 
-    if (existingUser?.id) {
-      payload.user_id = existingUser.id;
-    } else {
-      const passwordPayload = hashPassword(String(body.password || "").trim() || "Customer@123");
-      const { data: customerUser, error: customerUserError } = await supabase
-        .from("member_users")
-        .insert({
-          name: payload.name || email,
-          email,
-          role: "customer",
-          status: "active",
-          phone: payload.phone || null,
-          ...passwordPayload
-        })
-        .select("id")
-        .single();
+    if (customerError || !customer) {
+      return NextResponse.json({ error: "Khong tim thay ho so khach hang" }, { status: 404 });
+    }
 
-      if (customerUserError) {
-        return NextResponse.json({ error: customerUserError.message }, { status: 400 });
-      }
-
-      payload.user_id = customerUser.id;
+    const sync = await syncCustomerUser(supabase, customer, payload);
+    if (sync.error) {
+      return NextResponse.json({ error: sync.error }, { status: sync.status });
     }
   }
 
@@ -594,6 +667,21 @@ async function deleteResource(request, params) {
     }
   }
 
+  let deletedCustomerUserId = null;
+  if (collection === "customers") {
+    const { data: customer, error: customerError } = await supabase
+      .from("customers")
+      .select("id,user_id")
+      .eq("id", id)
+      .maybeSingle();
+
+    if (customerError || !customer) {
+      return NextResponse.json({ error: "Khong tim thay ho so khach hang" }, { status: 404 });
+    }
+
+    deletedCustomerUserId = customer.user_id;
+  }
+
   let previousTransaction = null;
   if (collection === "transactions") {
     const { data: previous } = await supabase
@@ -612,6 +700,21 @@ async function deleteResource(request, params) {
 
   if (previousTransaction) {
     await applyTransactionToCard(supabase, { ...previousTransaction, amount: 0, points_delta: 0 }, previousTransaction);
+  }
+
+  if (deletedCustomerUserId) {
+    const { count } = await supabase
+      .from("customers")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", deletedCustomerUserId);
+
+    if (!count) {
+      await supabase
+        .from("member_users")
+        .delete()
+        .eq("id", deletedCustomerUserId)
+        .eq("role", "customer");
+    }
   }
 
   return NextResponse.json({ ok: true, id });

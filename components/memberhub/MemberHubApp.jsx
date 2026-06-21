@@ -1297,9 +1297,9 @@ function getEditableFields(view, t, data = {}) {
       { key: "status", label: t("common.status"), defaultValue: "active", options: statusOptions.activeLocked }
     ],
     customers: [
-      { key: "shop_id", label: t("shop.name"), type: "number", options: shopOptions },
-      { key: "name", label: t("customer.name") },
-      { key: "email", label: t("customer.email"), type: "email" },
+      { key: "shop_id", label: t("shop.name"), type: "number", required: true, options: shopOptions },
+      { key: "name", label: t("customer.name"), required: true },
+      { key: "email", label: t("customer.email"), type: "email", required: true },
       { key: "password", label: t("auth.password"), type: "password", addOnly: true, placeholder: "Customer@123" },
       { key: "phone", label: t("customer.phone") },
       { key: "birthday", label: t("customer.birthday"), type: "date" },

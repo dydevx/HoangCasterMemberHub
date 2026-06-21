@@ -76,7 +76,7 @@ model StoreUser {
 
 model Customer {
   id        Int       @id @default(autoincrement())
-  userId    Int?      @map("user_id")
+  userId    Int       @map("user_id")
   shopId    Int       @map("shop_id")
   name      String
   slug      String?
@@ -90,7 +90,7 @@ model Customer {
   status    String    @default("active")
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
-  user      MemberUser? @relation(fields: [userId], references: [id], onDelete: SetNull)
+  user      MemberUser @relation(fields: [userId], references: [id], onDelete: Cascade)
   shop      Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
   cards     MembershipCard[]
   transactions Transaction[]
