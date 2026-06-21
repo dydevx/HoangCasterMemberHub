@@ -37,16 +37,10 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createTranslator as createNextIntlTranslator, NextIntlClientProvider } from "next-intl";
-import { dashboardPathFor, isCustomer, isSuperAdmin, normalizeRole } from "@/lib/memberhub/access";
+import { dashboardPathFor, isCustomer, isStoreOwner, isSuperAdmin, normalizeRole } from "@/lib/memberhub/access";
 import { getMessagesForLocale } from "@/lib/memberhub/i18n";
 import { normalizeRoutePath } from "@/lib/memberhub/slug";
 import { createTranslator, locales } from "@/messages/memberhub";
-
-const credentials = {
-  super_admin: ["admin@example.com", "Admin@123"],
-  store_owner: ["owner@example.com", "Owner@123"],
-  customer: ["customer@example.com", "Customer@123"]
-};
 
 const navItems = {
   super_admin: [
@@ -111,8 +105,6 @@ const roleKeys = {
   customer: "app.customer"
 };
 
-const loginRoles = ["super_admin", "store_owner", "customer"];
-
 function money(value) {
   return new Intl.NumberFormat("vi-VN", {
     style: "currency",
@@ -158,14 +150,6 @@ function readStored(key, fallback) {
   return localStorage.getItem(key) || fallback;
 }
 
-function roleFromPath() {
-  if (typeof window === "undefined") return "super_admin";
-
-  const segments = window.location.pathname.split("/").filter(Boolean);
-  if (!segments.length || segments[0] === "admin") return "super_admin";
-  return segments.length > 1 ? "customer" : "store_owner";
-}
-
 export function MemberHubApp() {
   const [locale, setLocale] = useState("vi");
   const messages = useMemo(() => getMessagesForLocale(locale), [locale]);
@@ -185,7 +169,6 @@ function MemberHubAppContent({ locale, setLocale }) {
   const router = useRouter();
   const [token, setToken] = useState("");
   const [user, setUser] = useState(null);
-  const [role, setRole] = useState(() => roleFromPath());
   const [view, setView] = useState("overview");
   const [data, setData] = useState(null);
   const [status, setStatus] = useState("");
@@ -214,7 +197,6 @@ function MemberHubAppContent({ locale, setLocale }) {
     setTheme(readStored("memberhub_theme", "light"));
     const savedToken = localStorage.getItem("memberhub_token") || "";
     if (!savedToken) {
-      setRole(roleFromPath());
       setBooting(false);
       return;
     }
@@ -228,8 +210,7 @@ function MemberHubAppContent({ locale, setLocale }) {
       .then(([payload, nextData]) => {
         const nextUser = { ...payload.user, role: normalizeRole(payload.user.role) };
         setUser(nextUser);
-        setRole(nextUser.role);
-        setLocale(isCustomer(nextUser) ? nextUser.locale || readStored("memberhub_locale", "vi") : "vi");
+        setLocale(isSuperAdmin(nextUser) ? "vi" : readStored("memberhub_locale", nextUser.locale || "vi"));
         setView(isCustomer(nextUser) ? "cards" : "overview");
         setData(nextData);
         router.replace(dashboardPathFor(nextUser, nextData));
@@ -272,14 +253,13 @@ function MemberHubAppContent({ locale, setLocale }) {
         method: "POST",
         body: JSON.stringify({
           email: form.get("email"),
-          password: form.get("password"),
-          role
+          password: form.get("password")
         })
       });
 
       localStorage.setItem("memberhub_token", payload.token);
       const nextUser = { ...payload.user, role: normalizeRole(payload.user.role) };
-      const nextLocale = isCustomer(nextUser) ? nextUser.locale || locale : "vi";
+      const nextLocale = isSuperAdmin(nextUser) ? "vi" : nextUser.locale || locale;
       setToken(payload.token);
       setUser(nextUser);
       setLocale(nextLocale);
@@ -299,7 +279,6 @@ function MemberHubAppContent({ locale, setLocale }) {
     setToken("");
     setUser(null);
     setData(null);
-    setRole(roleFromPath());
     setView("overview");
     router.replace("/");
   }
@@ -353,12 +332,10 @@ function MemberHubAppContent({ locale, setLocale }) {
       <LoginScreen
         loading={loading}
         locale={locale}
-        role={role}
         status={status}
         t={t}
         theme={theme}
         setLocale={setLocale}
-        setRole={setRole}
         setTheme={setTheme}
         onSubmit={login}
       />
@@ -394,7 +371,7 @@ function MemberHubAppContent({ locale, setLocale }) {
             <h1>{t(getViewTitleKey(view))}</h1>
           </div>
           <div className="mh-account">
-            {isCustomer(user) ? (
+            {isStoreOwner(user) || isCustomer(user) ? (
               <LanguageSwitcher locale={locale} setLocale={setLocale} t={t} />
             ) : null}
             <ThemeToggle setTheme={setTheme} t={t} theme={theme} />
@@ -452,11 +429,9 @@ function Brand({ t, role }) {
   );
 }
 
-function LoginScreen({ loading, locale, role, status, t, theme, setLocale, setRole, setTheme, onSubmit }) {
-  const [email, password] = credentials[role] || ["", ""];
-
+function LoginScreen({ loading, locale, status, t, theme, setLocale, setTheme, onSubmit }) {
   return (
-    <main className={`mh-auth role-${role}`}>
+    <main className="mh-auth">
       <section className="mh-auth-panel">
         <div className="mh-auth-brand">
           <span className="mh-mark">M</span>
@@ -465,26 +440,14 @@ function LoginScreen({ loading, locale, role, status, t, theme, setLocale, setRo
             <h1>{t("auth.login")}</h1>
           </div>
         </div>
-        <div className="mh-role-tabs" role="tablist" aria-label={t("common.role")}>
-          {loginRoles.map((item) => (
-            <button
-              className={normalizeRole(role) === item ? "active" : ""}
-              key={item}
-              onClick={() => setRole(item)}
-              type="button"
-            >
-              {t(roleKeys[item])}
-            </button>
-          ))}
-        </div>
-        <form className="mh-form" key={role} onSubmit={onSubmit}>
+        <form className="mh-form" onSubmit={onSubmit}>
           <label>
             {t("auth.email")}
-            <input name="email" type="email" required defaultValue={email} />
+            <input name="email" type="email" required autoComplete="email" />
           </label>
           <label>
             {t("auth.password")}
-            <input name="password" type="password" required defaultValue={password} />
+            <input name="password" type="password" required autoComplete="current-password" />
           </label>
           <div className="mh-form-row compact">
             <label className="mh-check">
@@ -499,9 +462,7 @@ function LoginScreen({ loading, locale, role, status, t, theme, setLocale, setRo
           </button>
         </form>
         <div className="mh-auth-tools">
-          {normalizeRole(role) === "customer" ? (
-            <LanguageSwitcher locale={locale} setLocale={setLocale} t={t} />
-          ) : null}
+          <LanguageSwitcher locale={locale} setLocale={setLocale} t={t} />
           <ThemeToggle setTheme={setTheme} t={t} theme={theme} />
         </div>
       </section>
