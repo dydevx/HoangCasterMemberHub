@@ -1894,3 +1894,337 @@ code {
     grid-template-columns: 1fr;
   }
 }
+
+/* MemberHub premium visual refresh */
+:root {
+  --mh-bg: #eef3f0;
+  --mh-panel: rgba(255, 255, 255, 0.9);
+  --mh-panel-solid: #ffffff;
+  --mh-panel-soft: rgba(247, 250, 248, 0.86);
+  --mh-text: #18201d;
+  --mh-muted: #66746f;
+  --mh-line: rgba(118, 135, 127, 0.22);
+  --mh-brand: #0f766e;
+  --mh-brand-dark: #164d42;
+  --mh-accent: #b88746;
+  --mh-warn: #b87503;
+  --mh-danger: #c2415b;
+  --mh-shadow: 0 18px 54px rgba(23, 35, 30, 0.1);
+  --mh-shadow-strong: 0 30px 90px rgba(23, 35, 30, 0.18);
+  --mh-auth-image: url("/assets/memberhub-auth-bg.png");
+}
+
+:root[data-theme="dark"] {
+  --mh-bg: #101615;
+  --mh-panel: rgba(19, 27, 25, 0.88);
+  --mh-panel-solid: #141d1b;
+  --mh-panel-soft: rgba(26, 38, 35, 0.82);
+  --mh-text: #eef6f2;
+  --mh-muted: #9eb0aa;
+  --mh-line: rgba(187, 205, 197, 0.16);
+  --mh-brand: #4fc6b8;
+  --mh-brand-dark: #9fdccf;
+  --mh-accent: #d4a767;
+  --mh-shadow: 0 18px 54px rgba(0, 0, 0, 0.34);
+  --mh-shadow-strong: 0 30px 90px rgba(0, 0, 0, 0.42);
+}
+
+.mh-entry,
+.mh-auth {
+  background:
+    radial-gradient(circle at 16% 18%, rgba(255, 255, 255, 0.72), transparent 32%),
+    linear-gradient(110deg, rgba(247, 250, 247, 0.94) 0%, rgba(247, 250, 247, 0.72) 42%, rgba(247, 250, 247, 0.4) 100%),
+    var(--mh-auth-image) center / cover no-repeat;
+  overflow: hidden;
+}
+
+:root[data-theme="dark"] .mh-entry,
+:root[data-theme="dark"] .mh-auth {
+  background:
+    radial-gradient(circle at 18% 20%, rgba(42, 63, 56, 0.62), transparent 34%),
+    linear-gradient(110deg, rgba(8, 14, 13, 0.92) 0%, rgba(8, 14, 13, 0.7) 45%, rgba(8, 14, 13, 0.34) 100%),
+    var(--mh-auth-image) center / cover no-repeat;
+}
+
+.mh-entry::before,
+.mh-auth::before,
+:root[data-theme="dark"] .mh-entry::before,
+:root[data-theme="dark"] .mh-auth::before {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.56)),
+    radial-gradient(circle at 85% 10%, rgba(184, 135, 70, 0.16), transparent 30%);
+}
+
+:root[data-theme="dark"] .mh-entry::before,
+:root[data-theme="dark"] .mh-auth::before {
+  background:
+    linear-gradient(180deg, rgba(3, 8, 7, 0.18), rgba(3, 8, 7, 0.64)),
+    radial-gradient(circle at 85% 10%, rgba(212, 167, 103, 0.18), transparent 30%);
+}
+
+.mh-auth-panel,
+.mh-entry-panel {
+  background: color-mix(in srgb, var(--mh-panel) 88%, transparent);
+  border: 1px solid color-mix(in srgb, var(--mh-line) 58%, white);
+  box-shadow: var(--mh-shadow-strong);
+  position: relative;
+}
+
+.mh-auth-panel {
+  border-radius: 18px;
+  max-width: 548px;
+  padding: clamp(1.2rem, 3vw, 2rem);
+  width: min(548px, calc(100vw - 1.5rem));
+}
+
+.mh-auth-panel::after,
+.mh-entry-panel::after {
+  background: linear-gradient(90deg, var(--mh-brand), var(--mh-accent));
+  border-radius: inherit;
+  content: "";
+  height: 3px;
+  left: 1.1rem;
+  opacity: 0.9;
+  position: absolute;
+  right: 1.1rem;
+  top: 0.85rem;
+}
+
+.mh-auth-brand {
+  padding-top: 0.4rem;
+}
+
+.mh-auth-brand h1 {
+  font-size: clamp(2rem, 4vw, 2.75rem);
+  letter-spacing: 0;
+}
+
+.mh-mark {
+  background:
+    radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.38), transparent 28%),
+    linear-gradient(135deg, var(--mh-brand), var(--mh-accent));
+  box-shadow: 0 12px 28px color-mix(in srgb, var(--mh-brand) 28%, transparent);
+}
+
+.mh-form input,
+.mh-form select,
+.mh-form textarea,
+.mh-search input,
+.mh-select select,
+.mh-mini-select select,
+.mh-scan-input input {
+  background: color-mix(in srgb, var(--mh-panel-soft) 92%, white);
+  border-color: var(--mh-line);
+}
+
+.mh-form input:focus,
+.mh-search:focus-within,
+.mh-select:focus-within,
+.mh-mini-select:focus-within,
+.mh-scan-input:focus-within {
+  border-color: color-mix(in srgb, var(--mh-brand) 72%, white);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--mh-brand) 16%, transparent);
+}
+
+.mh-primary {
+  background: linear-gradient(135deg, var(--mh-brand), var(--mh-brand-dark));
+  border-color: transparent;
+  box-shadow: 0 14px 30px color-mix(in srgb, var(--mh-brand) 22%, transparent);
+}
+
+.mh-primary:hover,
+.mh-tool-button:hover,
+.mh-icon-toggle:hover,
+.mh-account button:hover,
+.mh-role-tabs button:hover {
+  transform: translateY(-1px);
+}
+
+.mh-role-tabs {
+  background: color-mix(in srgb, var(--mh-panel-soft) 72%, transparent);
+  backdrop-filter: blur(18px);
+}
+
+.mh-role-tabs button {
+  transition: background 160ms ease, color 160ms ease, transform 160ms ease;
+  white-space: normal;
+}
+
+.mh-role-tabs button.active {
+  background: color-mix(in srgb, var(--mh-panel-solid) 94%, transparent);
+  color: var(--mh-brand-dark);
+}
+
+.mh-shell {
+  background:
+    radial-gradient(circle at 18% -8%, rgba(15, 118, 110, 0.16), transparent 28%),
+    radial-gradient(circle at 102% 18%, rgba(184, 135, 70, 0.14), transparent 34%),
+    linear-gradient(180deg, #f7faf8 0%, var(--mh-bg) 100%);
+}
+
+:root[data-theme="dark"] .mh-shell {
+  background:
+    radial-gradient(circle at 18% -8%, rgba(79, 198, 184, 0.16), transparent 28%),
+    radial-gradient(circle at 102% 18%, rgba(212, 167, 103, 0.13), transparent 34%),
+    linear-gradient(180deg, #0d1312 0%, var(--mh-bg) 100%);
+}
+
+.mh-sidebar {
+  background:
+    linear-gradient(180deg, rgba(14, 44, 39, 0.98), rgba(18, 32, 29, 0.98)),
+    var(--mh-auth-image) 28% center / cover no-repeat;
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 18px 0 52px rgba(19, 32, 28, 0.12);
+}
+
+.mh-sidebar::before {
+  background: linear-gradient(180deg, rgba(7, 18, 16, 0.76), rgba(7, 18, 16, 0.92));
+  content: "";
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+}
+
+.mh-sidebar {
+  isolation: isolate;
+  position: sticky;
+}
+
+.mh-sidebar > * {
+  position: relative;
+  z-index: 1;
+}
+
+.mh-nav button {
+  color: rgba(255, 255, 255, 0.74);
+  transition: background 160ms ease, color 160ms ease, transform 160ms ease;
+}
+
+.mh-nav button.active,
+.mh-nav button:hover {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+}
+
+.mh-topbar {
+  background: color-mix(in srgb, var(--mh-panel-solid) 78%, transparent);
+  border-color: var(--mh-line);
+  box-shadow: 0 12px 36px rgba(23, 35, 30, 0.06);
+}
+
+:root[data-theme="dark"] .mh-topbar {
+  background: color-mix(in srgb, var(--mh-panel-solid) 78%, transparent);
+}
+
+.mh-view {
+  gap: 1.25rem;
+}
+
+.mh-card,
+.mh-stat,
+.mh-empty,
+.mh-table-wrap,
+.mh-modal,
+.mh-tool-button,
+.mh-account button,
+.mh-mini-select,
+.mh-icon-toggle {
+  background: color-mix(in srgb, var(--mh-panel-solid) 92%, transparent);
+  border-color: var(--mh-line);
+  box-shadow: var(--mh-shadow);
+}
+
+.mh-card,
+.mh-stat,
+.mh-table-wrap {
+  backdrop-filter: blur(12px);
+}
+
+.mh-stat {
+  border-left: 4px solid color-mix(in srgb, var(--mh-brand) 78%, var(--mh-accent));
+}
+
+.mh-stat strong {
+  letter-spacing: 0;
+}
+
+.mh-panel-title {
+  color: var(--mh-brand-dark);
+}
+
+.mh-table th {
+  background: color-mix(in srgb, var(--mh-panel-soft) 88%, transparent);
+}
+
+.mh-table tbody tr {
+  transition: background 140ms ease;
+}
+
+.mh-table tbody tr:hover {
+  background: color-mix(in srgb, var(--mh-brand) 7%, transparent);
+}
+
+.mh-status {
+  border-radius: 8px;
+}
+
+.mh-member-card {
+  background:
+    radial-gradient(circle at top right, rgba(212, 167, 103, 0.36), transparent 30%),
+    linear-gradient(135deg, #12352f, #0f766e 54%, #13201d);
+}
+
+@media (max-width: 900px) {
+  .mh-sidebar {
+    background:
+      linear-gradient(90deg, rgba(14, 44, 39, 0.98), rgba(18, 32, 29, 0.98)),
+      var(--mh-auth-image) center / cover no-repeat;
+  }
+}
+
+@media (max-width: 640px) {
+  .mh-entry,
+  .mh-auth {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    justify-items: stretch;
+    overflow-x: hidden;
+    width: 100%;
+  }
+
+  .mh-auth-panel {
+    border-radius: 14px;
+    justify-self: center;
+    margin-left: 0;
+    margin-right: 0;
+    max-width: min(360px, calc(100vw - 2rem)) !important;
+    min-width: 0 !important;
+    width: min(360px, calc(100vw - 2rem)) !important;
+  }
+
+  .mh-role-tabs {
+    grid-template-columns: 1fr;
+    min-width: 0;
+  }
+
+  .mh-auth-brand h1 {
+    font-size: 2rem;
+  }
+
+  .mh-form,
+  .mh-form label,
+  .mh-form input,
+  .mh-primary {
+    min-width: 0;
+    max-width: 100%;
+    width: 100% !important;
+  }
+
+  .mh-auth-panel .mh-check {
+    justify-content: flex-start;
+    white-space: nowrap;
+    width: fit-content !important;
+  }
+}
