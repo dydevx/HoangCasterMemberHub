@@ -1,6 +1,7 @@
 import { requireMemberUser } from "@/lib/memberhub/auth";
 import { isCustomer, isStoreOwner, isSuperAdmin, normalizeRole } from "@/lib/memberhub/access";
 import { getDemoRawData } from "@/lib/memberhub/demoData";
+import { routePathFor, routeSlug } from "@/lib/memberhub/slug";
 import { createSupabaseServerClient } from "@/lib/supabaseServer";
 import { NextResponse } from "next/server";
 
@@ -17,20 +18,146 @@ async function readOptional(supabase, table, select = "*") {
 }
 
 function byId(items) {
-  return new Map(items.map((item) => [item.id, item]));
+  return new Map((items || []).map((item) => [item.id, item]));
 }
 
-function slugify(value) {
-  return String(value || "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "");
+async function readWhereIn(supabase, table, column, values, select = "*") {
+  const list = [...new Set((values || []).filter((value) => value !== null && value !== undefined))];
+  if (!list.length) return [];
+
+  const { data, error } = await supabase.from(table).select(select).in(column, list);
+  if (error) throw error;
+  return data || [];
 }
 
-function routeSlug(row) {
-  return slugify(row?.slug || row?.name);
+async function readOptionalWhereIn(supabase, table, column, values, select = "*") {
+  try {
+    return await readWhereIn(supabase, table, column, values, select);
+  } catch {
+    return [];
+  }
+}
+
+async function readWhereEq(supabase, table, column, value, select = "*") {
+  const { data, error } = await supabase.from(table).select(select).eq(column, value);
+  if (error) throw error;
+  return data || [];
+}
+
+async function readOptionalWhereEq(supabase, table, column, value, select = "*") {
+  try {
+    return await readWhereEq(supabase, table, column, value, select);
+  } catch {
+    return [];
+  }
+}
+
+function emptyRawData(overrides = {}) {
+  return {
+    shops: [],
+    storeUsers: [],
+    users: [],
+    customers: [],
+    services: [],
+    levels: [],
+    cards: [],
+    transactions: [],
+    promotions: [],
+    activityLogs: [],
+    notifications: [],
+    settings: [],
+    languages: [],
+    ...overrides
+  };
+}
+
+async function ownedShopIdsFor(supabase, user) {
+  const [ownedShops, assignedStores] = await Promise.all([
+    readWhereEq(supabase, "shops", "owner_id", user.id, "id"),
+    readOptionalWhereEq(supabase, "store_users", "user_id", user.id, "store_id")
+  ]);
+
+  return [...new Set([
+    ...ownedShops.map((shop) => shop.id),
+    ...assignedStores.map((item) => item.store_id)
+  ])];
+}
+
+async function readStoreOwnerData(supabase, user) {
+  const shopIds = await ownedShopIdsFor(supabase, user);
+  if (!shopIds.length) return emptyRawData({ users: [user] });
+
+  const [shops, storeUsers] = await Promise.all([
+    readWhereIn(supabase, "shops", "id", shopIds),
+    readOptionalWhereIn(supabase, "store_users", "store_id", shopIds)
+  ]);
+  const userIds = [
+    user.id,
+    ...shops.map((shop) => shop.owner_id),
+    ...storeUsers.map((item) => item.user_id)
+  ];
+
+  const [users, customers, services, levels, cards, transactions, promotions, activityLogs, notifications, settings, languages] = await Promise.all([
+    readWhereIn(supabase, "member_users", "id", userIds, "id,name,email,role,status,phone,locale,created_at"),
+    readWhereIn(supabase, "customers", "shop_id", shopIds),
+    readWhereIn(supabase, "services", "shop_id", shopIds),
+    readOptionalWhereIn(supabase, "membership_levels", "shop_id", shopIds),
+    readWhereIn(supabase, "membership_cards", "shop_id", shopIds),
+    readWhereIn(supabase, "transactions", "shop_id", shopIds),
+    readWhereIn(supabase, "promotions", "shop_id", shopIds),
+    readOptionalWhereIn(supabase, "activity_logs", "shop_id", shopIds),
+    readOptionalWhereIn(supabase, "notifications", "shop_id", shopIds),
+    readOptionalWhereIn(supabase, "settings", "shop_id", shopIds),
+    readOptional(supabase, "languages")
+  ]);
+
+  return emptyRawData({
+    shops,
+    storeUsers,
+    users,
+    customers,
+    services,
+    levels,
+    cards,
+    transactions,
+    promotions,
+    activityLogs,
+    notifications,
+    settings,
+    languages
+  });
+}
+
+async function readCustomerData(supabase, user) {
+  const customers = await readWhereEq(supabase, "customers", "user_id", user.id);
+  const customerIds = customers.map((customer) => customer.id);
+  const shopIds = [...new Set(customers.map((customer) => customer.shop_id))];
+
+  if (!customerIds.length || !shopIds.length) return emptyRawData({ users: [user] });
+
+  const [shops, services, levels, cards, transactions, promotions, notifications, languages] = await Promise.all([
+    readWhereIn(supabase, "shops", "id", shopIds),
+    readWhereIn(supabase, "services", "shop_id", shopIds),
+    readOptionalWhereIn(supabase, "membership_levels", "shop_id", shopIds),
+    readWhereIn(supabase, "membership_cards", "customer_id", customerIds),
+    readWhereIn(supabase, "transactions", "customer_id", customerIds),
+    readWhereIn(supabase, "promotions", "shop_id", shopIds),
+    readOptionalWhereEq(supabase, "notifications", "user_id", user.id),
+    readOptional(supabase, "languages")
+  ]);
+
+  return emptyRawData({
+    shops,
+    users: [user],
+    customers,
+    services,
+    levels,
+    cards,
+    transactions,
+    promotions,
+    notifications,
+    languages
+  });
 }
 
 function scopedData(user, data) {
@@ -97,7 +224,7 @@ function shapeData(data) {
     shops: data.shops.map((shop) => ({
       ...shop,
       slug: routeSlug(shop),
-      store_url: routeSlug(shop) ? `/${routeSlug(shop)}` : "",
+      store_url: routePathFor(routeSlug(shop)),
       owner_name: [
         userMap.get(shop.owner_id)?.name,
         ...(data.storeUsers || [])
@@ -118,9 +245,7 @@ function shapeData(data) {
       slug: routeSlug(customer),
       shop_name: shopMap.get(customer.shop_id)?.name || "",
       shop_slug: routeSlug(shopMap.get(customer.shop_id)),
-      customer_url: routeSlug(shopMap.get(customer.shop_id)) && routeSlug(customer)
-        ? `/${routeSlug(shopMap.get(customer.shop_id))}/${routeSlug(customer)}`
-        : ""
+      customer_url: routePathFor(routeSlug(shopMap.get(customer.shop_id)), routeSlug(customer))
     })),
     services: data.services.map((service) => ({
       ...service,
@@ -167,6 +292,14 @@ export async function GET(request) {
         ...scopedData(auth.user, shapeData(getDemoRawData())),
         demo: true
       });
+    }
+
+    if (isStoreOwner(auth.user)) {
+      return NextResponse.json(shapeData(await readStoreOwnerData(supabase, auth.user)));
+    }
+
+    if (isCustomer(auth.user)) {
+      return NextResponse.json(shapeData(await readCustomerData(supabase, auth.user)));
     }
 
     const [shops, storeUsers, users, customers, services, levels, cards, transactions, promotions, activityLogs, notifications, settings, languages] = await Promise.all([

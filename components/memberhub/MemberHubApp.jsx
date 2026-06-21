@@ -39,6 +39,7 @@ import { useRouter } from "next/navigation";
 import { createTranslator as createNextIntlTranslator, NextIntlClientProvider } from "next-intl";
 import { dashboardPathFor, isCustomer, isSuperAdmin, normalizeRole } from "@/lib/memberhub/access";
 import { getMessagesForLocale } from "@/lib/memberhub/i18n";
+import { normalizeRoutePath } from "@/lib/memberhub/slug";
 import { createTranslator, locales } from "@/messages/memberhub";
 
 const credentials = {
@@ -110,6 +111,8 @@ const roleKeys = {
   customer: "app.customer"
 };
 
+const loginRoles = ["super_admin", "store_owner", "customer"];
+
 function money(value) {
   return new Intl.NumberFormat("vi-VN", {
     style: "currency",
@@ -155,6 +158,14 @@ function readStored(key, fallback) {
   return localStorage.getItem(key) || fallback;
 }
 
+function roleFromPath() {
+  if (typeof window === "undefined") return "super_admin";
+
+  const segments = window.location.pathname.split("/").filter(Boolean);
+  if (!segments.length || segments[0] === "admin") return "super_admin";
+  return segments.length > 1 ? "customer" : "store_owner";
+}
+
 export function MemberHubApp() {
   const [locale, setLocale] = useState("vi");
   const messages = useMemo(() => getMessagesForLocale(locale), [locale]);
@@ -174,7 +185,7 @@ function MemberHubAppContent({ locale, setLocale }) {
   const router = useRouter();
   const [token, setToken] = useState("");
   const [user, setUser] = useState(null);
-  const [role, setRole] = useState("super_admin");
+  const [role, setRole] = useState(() => roleFromPath());
   const [view, setView] = useState("overview");
   const [data, setData] = useState(null);
   const [status, setStatus] = useState("");
@@ -203,26 +214,25 @@ function MemberHubAppContent({ locale, setLocale }) {
     setTheme(readStored("memberhub_theme", "light"));
     const savedToken = localStorage.getItem("memberhub_token") || "";
     if (!savedToken) {
+      setRole(roleFromPath());
       setBooting(false);
       return;
     }
 
     setToken(savedToken);
     setLoading(true);
-    let bootUser = null;
-    api("/api/me", savedToken)
-      .then((payload) => {
+    Promise.all([
+      api("/api/me", savedToken),
+      api("/api/app-data", savedToken)
+    ])
+      .then(([payload, nextData]) => {
         const nextUser = { ...payload.user, role: normalizeRole(payload.user.role) };
-        bootUser = nextUser;
         setUser(nextUser);
         setRole(nextUser.role);
         setLocale(isCustomer(nextUser) ? nextUser.locale || readStored("memberhub_locale", "vi") : "vi");
         setView(isCustomer(nextUser) ? "cards" : "overview");
-        return api("/api/app-data", savedToken);
-      })
-      .then((nextData) => {
         setData(nextData);
-        router.replace(dashboardPathFor(bootUser, nextData));
+        router.replace(dashboardPathFor(nextUser, nextData));
       })
       .catch(() => {
         localStorage.removeItem("memberhub_token");
@@ -262,7 +272,8 @@ function MemberHubAppContent({ locale, setLocale }) {
         method: "POST",
         body: JSON.stringify({
           email: form.get("email"),
-          password: form.get("password")
+          password: form.get("password"),
+          role
         })
       });
 
@@ -288,7 +299,7 @@ function MemberHubAppContent({ locale, setLocale }) {
     setToken("");
     setUser(null);
     setData(null);
-    setRole("super_admin");
+    setRole(roleFromPath());
     setView("overview");
     router.replace("/");
   }
@@ -347,6 +358,7 @@ function MemberHubAppContent({ locale, setLocale }) {
         t={t}
         theme={theme}
         setLocale={setLocale}
+        setRole={setRole}
         setTheme={setTheme}
         onSubmit={login}
       />
@@ -440,7 +452,7 @@ function Brand({ t, role }) {
   );
 }
 
-function LoginScreen({ loading, locale, role, status, t, theme, setLocale, setTheme, onSubmit }) {
+function LoginScreen({ loading, locale, role, status, t, theme, setLocale, setRole, setTheme, onSubmit }) {
   const [email, password] = credentials[role] || ["", ""];
 
   return (
@@ -453,7 +465,19 @@ function LoginScreen({ loading, locale, role, status, t, theme, setLocale, setTh
             <h1>{t("auth.login")}</h1>
           </div>
         </div>
-        <form className="mh-form" onSubmit={onSubmit}>
+        <div className="mh-role-tabs" role="tablist" aria-label={t("common.role")}>
+          {loginRoles.map((item) => (
+            <button
+              className={normalizeRole(role) === item ? "active" : ""}
+              key={item}
+              onClick={() => setRole(item)}
+              type="button"
+            >
+              {t(roleKeys[item])}
+            </button>
+          ))}
+        </div>
+        <form className="mh-form" key={role} onSubmit={onSubmit}>
           <label>
             {t("auth.email")}
             <input name="email" type="email" required defaultValue={email} />
@@ -1428,20 +1452,7 @@ function optionList(rows = [], valueKey, labelFor) {
 }
 
 function routePath(value) {
-  const text = String(value || "").trim();
-  if (!text) return "";
-  if (text.startsWith("/")) return text;
-  if (/^https?:\/\//i.test(text)) return text;
-  return `/${slugText(text)}`;
-}
-
-function slugText(value) {
-  return String(value || "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "");
+  return normalizeRoutePath(value);
 }
 
 function formatCell(value) {

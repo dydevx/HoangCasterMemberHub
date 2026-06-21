@@ -1,5 +1,6 @@
 import { hashPassword, requireMemberUser } from "@/lib/memberhub/auth";
 import { isCustomer, isStoreOwner, isSuperAdmin, normalizeRole, toLegacyRole } from "@/lib/memberhub/access";
+import { slugify } from "@/lib/memberhub/slug";
 import { createSupabaseServerClient } from "@/lib/supabaseServer";
 import { NextResponse } from "next/server";
 
@@ -82,15 +83,6 @@ const numericFields = new Set([
   "amount",
   "points_delta"
 ]);
-
-function slugify(value) {
-  return String(value || "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "");
-}
 
 function cleanPayload(body, config) {
   return config.fields.reduce((result, field) => {
@@ -374,6 +366,10 @@ async function writeResource(request, params, mode) {
 
   if (config.fields.includes("slug") && !payload.slug && payload.name) {
     payload.slug = slugify(payload.name);
+  }
+
+  if (config.fields.includes("slug") && payload.slug) {
+    payload.slug = slugify(payload.slug);
   }
 
   if (collection === "cards" && !payload.qr_payload && payload.card_number) {

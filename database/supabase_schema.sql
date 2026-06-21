@@ -507,6 +507,59 @@ select setval(pg_get_serial_sequence('public.membership_cards', 'id'), greatest(
 select setval(pg_get_serial_sequence('public.transactions', 'id'), greatest((select max(id) from public.transactions), 1), true);
 select setval(pg_get_serial_sequence('public.promotions', 'id'), greatest((select max(id) from public.promotions), 1), true);
 
+create extension if not exists unaccent;
+
+create or replace function public.memberhub_slugify(value text)
+returns text
+language sql
+stable
+as $$
+  select trim(both '-' from regexp_replace(replace(lower(unaccent(coalesce(value, ''))), 'đ', 'd'), '[^a-z0-9]+', '-', 'g'));
+$$;
+
+with normalized as (
+  select
+    id,
+    coalesce(nullif(public.memberhub_slugify(coalesce(slug, name)), ''), 'shop') as base_slug
+  from public.shops
+),
+deduped as (
+  select
+    id,
+    case
+      when count(*) over (partition by base_slug) > 1 then base_slug || '-' || id
+      else base_slug
+    end as next_slug
+  from normalized
+)
+update public.shops
+set slug = deduped.next_slug
+from deduped
+where public.shops.id = deduped.id
+  and public.shops.slug is distinct from deduped.next_slug;
+
+with normalized as (
+  select
+    id,
+    shop_id,
+    coalesce(nullif(public.memberhub_slugify(coalesce(slug, name)), ''), 'customer') as base_slug
+  from public.customers
+),
+deduped as (
+  select
+    id,
+    case
+      when count(*) over (partition by shop_id, base_slug) > 1 then base_slug || '-' || id
+      else base_slug
+    end as next_slug
+  from normalized
+)
+update public.customers
+set slug = deduped.next_slug
+from deduped
+where public.customers.id = deduped.id
+  and public.customers.slug is distinct from deduped.next_slug;
+
 -- SaaS extensions for the production-style MemberHub dashboard.
 alter table public.member_users add column if not exists locale text default 'vi';
 alter table public.customers add column if not exists gender text;
