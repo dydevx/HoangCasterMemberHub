@@ -150,6 +150,28 @@ function readStored(key, fallback) {
   return localStorage.getItem(key) || fallback;
 }
 
+function expectedRoleForPath() {
+  if (typeof window === "undefined") return null;
+
+  const segments = window.location.pathname.split("/").filter(Boolean);
+  if (!segments.length) return null;
+  if (segments[0] === "admin") return "super_admin";
+  return segments.length > 1 ? "customer" : "store_owner";
+}
+
+function currentPathMatchesUser(user, data) {
+  if (typeof window === "undefined") return true;
+
+  const expectedRole = expectedRoleForPath();
+  if (!expectedRole) return true;
+  if (normalizeRole(user.role) !== expectedRole) return false;
+  if (expectedRole === "super_admin") return window.location.pathname.startsWith("/admin");
+
+  const currentPath = normalizeRoutePath(window.location.pathname) || "/";
+  const dashboardPath = normalizeRoutePath(dashboardPathFor(user, data)) || "/";
+  return currentPath === dashboardPath;
+}
+
 export function MemberHubApp() {
   const [locale, setLocale] = useState("vi");
   const messages = useMemo(() => getMessagesForLocale(locale), [locale]);
@@ -201,7 +223,6 @@ function MemberHubAppContent({ locale, setLocale }) {
       return;
     }
 
-    setToken(savedToken);
     setLoading(true);
     Promise.all([
       api("/api/me", savedToken),
@@ -209,6 +230,12 @@ function MemberHubAppContent({ locale, setLocale }) {
     ])
       .then(([payload, nextData]) => {
         const nextUser = { ...payload.user, role: normalizeRole(payload.user.role) };
+        if (!currentPathMatchesUser(nextUser, nextData)) {
+          setToken("");
+          return;
+        }
+
+        setToken(savedToken);
         setUser(nextUser);
         setLocale(isSuperAdmin(nextUser) ? "vi" : readStored("memberhub_locale", nextUser.locale || "vi"));
         setView(isCustomer(nextUser) ? "cards" : "overview");
@@ -318,13 +345,7 @@ function MemberHubAppContent({ locale, setLocale }) {
   }
 
   if (booting) {
-    return (
-      <main className="mh-auth">
-        <section className="mh-auth-panel">
-          <LoadingState t={t} />
-        </section>
-      </main>
-    );
+    return null;
   }
 
   if (!user) {
