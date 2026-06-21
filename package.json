@@ -5,6 +5,7 @@
   "description": "Next.js and Supabase website for products, services, and contact orders.",
   "scripts": {
     "dev": "next dev",
+    "db:import": "node scripts/import-supabase-schema.mjs",
     "build": "next build",
     "start": "next start"
   },
