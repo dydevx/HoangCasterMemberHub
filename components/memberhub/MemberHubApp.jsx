@@ -42,7 +42,8 @@ import { getMessagesForLocale } from "@/lib/memberhub/i18n";
 import { normalizeRoutePath } from "@/lib/memberhub/slug";
 import { createTranslator, locales } from "@/messages/memberhub";
 
-const appBasePath = process.env.NEXT_PUBLIC_BASE_PATH ?? (process.env.NODE_ENV === "production" ? "/HoangCasterMemberHub" : "");
+const appBasePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+const appAliasPath = "/HoangCasterMemberHub";
 
 const navItems = {
   super_admin: [
@@ -133,6 +134,11 @@ function withoutBasePath(path) {
   return path;
 }
 
+function appRoutePath(path) {
+  const pathname = withoutBasePath(path);
+  return pathname === appAliasPath ? "/" : pathname;
+}
+
 async function api(path, token, options = {}) {
   const response = await fetch(withBasePath(path), {
     ...options,
@@ -168,7 +174,7 @@ function readStored(key, fallback) {
 function expectedRoleForPath() {
   if (typeof window === "undefined") return null;
 
-  const pathname = withoutBasePath(window.location.pathname);
+  const pathname = appRoutePath(window.location.pathname);
   const segments = pathname.split("/").filter(Boolean);
   if (!segments.length) return null;
   if (segments[0] === "admin") return "super_admin";
@@ -181,9 +187,9 @@ function currentPathMatchesUser(user, data) {
   const expectedRole = expectedRoleForPath();
   if (!expectedRole) return true;
   if (normalizeRole(user.role) !== expectedRole) return false;
-  if (expectedRole === "super_admin") return withoutBasePath(window.location.pathname).startsWith("/admin");
+  if (expectedRole === "super_admin") return appRoutePath(window.location.pathname).startsWith("/admin");
 
-  const currentPath = normalizeRoutePath(withoutBasePath(window.location.pathname)) || "/";
+  const currentPath = normalizeRoutePath(appRoutePath(window.location.pathname)) || "/";
   const dashboardPath = normalizeRoutePath(dashboardPathFor(user, data)) || "/";
   return currentPath === dashboardPath;
 }
