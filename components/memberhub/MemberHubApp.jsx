@@ -42,6 +42,8 @@ import { getMessagesForLocale } from "@/lib/memberhub/i18n";
 import { normalizeRoutePath } from "@/lib/memberhub/slug";
 import { createTranslator, locales } from "@/messages/memberhub";
 
+const appBasePath = process.env.NEXT_PUBLIC_BASE_PATH ?? (process.env.NODE_ENV === "production" ? "/HoangCasterMemberHub" : "");
+
 const navItems = {
   super_admin: [
     ["overview", "nav.overview", LayoutDashboard],
@@ -118,8 +120,21 @@ function dateText(value) {
   return new Intl.DateTimeFormat("vi-VN", { dateStyle: "medium" }).format(new Date(value));
 }
 
+function withBasePath(path) {
+  if (!appBasePath || !path.startsWith("/")) return path;
+  if (path === appBasePath || path.startsWith(`${appBasePath}/`)) return path;
+  return `${appBasePath}${path}`;
+}
+
+function withoutBasePath(path) {
+  if (!appBasePath) return path;
+  if (path === appBasePath) return "/";
+  if (path.startsWith(`${appBasePath}/`)) return path.slice(appBasePath.length) || "/";
+  return path;
+}
+
 async function api(path, token, options = {}) {
-  const response = await fetch(path, {
+  const response = await fetch(withBasePath(path), {
     ...options,
     headers: {
       "Content-Type": "application/json",
@@ -153,7 +168,8 @@ function readStored(key, fallback) {
 function expectedRoleForPath() {
   if (typeof window === "undefined") return null;
 
-  const segments = window.location.pathname.split("/").filter(Boolean);
+  const pathname = withoutBasePath(window.location.pathname);
+  const segments = pathname.split("/").filter(Boolean);
   if (!segments.length) return null;
   if (segments[0] === "admin") return "super_admin";
   return segments.length > 1 ? "customer" : "store_owner";
@@ -165,9 +181,9 @@ function currentPathMatchesUser(user, data) {
   const expectedRole = expectedRoleForPath();
   if (!expectedRole) return true;
   if (normalizeRole(user.role) !== expectedRole) return false;
-  if (expectedRole === "super_admin") return window.location.pathname.startsWith("/admin");
+  if (expectedRole === "super_admin") return withoutBasePath(window.location.pathname).startsWith("/admin");
 
-  const currentPath = normalizeRoutePath(window.location.pathname) || "/";
+  const currentPath = normalizeRoutePath(withoutBasePath(window.location.pathname)) || "/";
   const dashboardPath = normalizeRoutePath(dashboardPathFor(user, data)) || "/";
   return currentPath === dashboardPath;
 }
@@ -345,7 +361,7 @@ function MemberHubAppContent({ locale, setLocale }) {
   }
 
   if (booting) {
-    return null;
+    return <BootScreen t={t} />;
   }
 
   if (!user) {
@@ -450,6 +466,26 @@ function Brand({ t, role }) {
   );
 }
 
+function BootScreen({ t }) {
+  return (
+    <main className="mh-auth mh-boot">
+      <section className="mh-auth-panel">
+        <div className="mh-auth-brand">
+          <LogoMark />
+          <div>
+            <p>{t("app.name")}</p>
+            <h1>{t("common.loading")}</h1>
+          </div>
+        </div>
+        <div className="mh-boot-state">
+          <Loader2 className="mh-spin" size={22} aria-hidden="true" />
+          <span>{t("common.loading")}</span>
+        </div>
+      </section>
+    </main>
+  );
+}
+
 function LoginScreen({ loading, locale, status, t, theme, setLocale, setTheme, onSubmit }) {
   return (
     <main className="mh-auth">
@@ -492,7 +528,7 @@ function LoginScreen({ loading, locale, status, t, theme, setLocale, setTheme, o
 }
 
 function LogoMark() {
-  return <img className="mh-logo" src="/assets/logo.png" alt="" aria-hidden="true" />;
+  return <img className="mh-logo" src={withBasePath("/assets/logo.png")} alt="" aria-hidden="true" />;
 }
 
 function DashboardView({ addLocalRow, deleteLocalRow, toggleLockRow, updateLocalRow, view, user, data, t }) {
@@ -1443,7 +1479,8 @@ function optionList(rows = [], valueKey, labelFor) {
 }
 
 function routePath(value) {
-  return normalizeRoutePath(value);
+  const path = normalizeRoutePath(value);
+  return path.startsWith("/") ? withBasePath(path) : path;
 }
 
 function formatCell(value) {

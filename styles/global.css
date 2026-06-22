@@ -1187,6 +1187,15 @@ code {
   gap: 0.7rem;
 }
 
+.mh-boot-state {
+  align-items: center;
+  color: var(--mh-muted);
+  display: flex;
+  font-weight: 800;
+  gap: 0.6rem;
+  padding-top: 0.5rem;
+}
+
 .mh-role-tabs {
   background: var(--mh-panel-soft);
   border: 1px solid var(--mh-line);
