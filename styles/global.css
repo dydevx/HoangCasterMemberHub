@@ -1897,34 +1897,34 @@ code {
 
 /* MemberHub premium visual refresh */
 :root {
-  --mh-bg: #eef3f0;
+  --mh-bg: #eef5ff;
   --mh-panel: rgba(255, 255, 255, 0.9);
   --mh-panel-solid: #ffffff;
-  --mh-panel-soft: rgba(247, 250, 248, 0.86);
-  --mh-text: #18201d;
-  --mh-muted: #66746f;
-  --mh-line: rgba(118, 135, 127, 0.22);
-  --mh-brand: #0f766e;
-  --mh-brand-dark: #164d42;
-  --mh-accent: #b88746;
+  --mh-panel-soft: rgba(247, 250, 255, 0.86);
+  --mh-text: #172033;
+  --mh-muted: #64748b;
+  --mh-line: rgba(96, 125, 173, 0.22);
+  --mh-brand: #2563eb;
+  --mh-brand-dark: #1e3a8a;
+  --mh-accent: #0ea5e9;
   --mh-warn: #b87503;
   --mh-danger: #c2415b;
-  --mh-shadow: 0 18px 54px rgba(23, 35, 30, 0.1);
-  --mh-shadow-strong: 0 30px 90px rgba(23, 35, 30, 0.18);
+  --mh-shadow: 0 18px 54px rgba(35, 56, 94, 0.1);
+  --mh-shadow-strong: 0 30px 90px rgba(35, 56, 94, 0.18);
   --mh-auth-image: url("/assets/background.png");
 }
 
 :root[data-theme="dark"] {
-  --mh-bg: #101615;
-  --mh-panel: rgba(19, 27, 25, 0.88);
-  --mh-panel-solid: #141d1b;
-  --mh-panel-soft: rgba(26, 38, 35, 0.82);
-  --mh-text: #eef6f2;
-  --mh-muted: #9eb0aa;
-  --mh-line: rgba(187, 205, 197, 0.16);
-  --mh-brand: #4fc6b8;
-  --mh-brand-dark: #9fdccf;
-  --mh-accent: #d4a767;
+  --mh-bg: #0d1322;
+  --mh-panel: rgba(15, 23, 42, 0.88);
+  --mh-panel-solid: #111827;
+  --mh-panel-soft: rgba(20, 32, 56, 0.82);
+  --mh-text: #eef4ff;
+  --mh-muted: #9fb2d3;
+  --mh-line: rgba(178, 199, 235, 0.16);
+  --mh-brand: #60a5fa;
+  --mh-brand-dark: #bfdbfe;
+  --mh-accent: #38bdf8;
   --mh-shadow: 0 18px 54px rgba(0, 0, 0, 0.34);
   --mh-shadow-strong: 0 30px 90px rgba(0, 0, 0, 0.42);
 }
@@ -1933,7 +1933,7 @@ code {
 .mh-auth {
   background:
     radial-gradient(circle at 16% 18%, rgba(255, 255, 255, 0.72), transparent 32%),
-    linear-gradient(110deg, rgba(247, 250, 247, 0.94) 0%, rgba(247, 250, 247, 0.72) 42%, rgba(247, 250, 247, 0.4) 100%),
+    linear-gradient(110deg, rgba(247, 250, 255, 0.94) 0%, rgba(247, 250, 255, 0.72) 42%, rgba(247, 250, 255, 0.4) 100%),
     var(--mh-auth-image) center / cover no-repeat;
   overflow: hidden;
 }
@@ -1952,14 +1952,14 @@ code {
 :root[data-theme="dark"] .mh-auth::before {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.56)),
-    radial-gradient(circle at 85% 10%, rgba(184, 135, 70, 0.16), transparent 30%);
+    radial-gradient(circle at 85% 10%, rgba(37, 99, 235, 0.14), transparent 30%);
 }
 
 :root[data-theme="dark"] .mh-entry::before,
 :root[data-theme="dark"] .mh-auth::before {
   background:
     linear-gradient(180deg, rgba(3, 8, 7, 0.18), rgba(3, 8, 7, 0.64)),
-    radial-gradient(circle at 85% 10%, rgba(212, 167, 103, 0.18), transparent 30%);
+    radial-gradient(circle at 85% 10%, rgba(96, 165, 250, 0.18), transparent 30%);
 }
 
 .mh-auth-panel,
@@ -2068,28 +2068,28 @@ code {
 
 .mh-shell {
   background:
-    radial-gradient(circle at 18% -8%, rgba(15, 118, 110, 0.16), transparent 28%),
-    radial-gradient(circle at 102% 18%, rgba(184, 135, 70, 0.14), transparent 34%),
-    linear-gradient(180deg, #f7faf8 0%, var(--mh-bg) 100%);
+    radial-gradient(circle at 18% -8%, rgba(37, 99, 235, 0.14), transparent 28%),
+    radial-gradient(circle at 102% 18%, rgba(14, 165, 233, 0.12), transparent 34%),
+    linear-gradient(180deg, #f8fbff 0%, var(--mh-bg) 100%);
 }
 
 :root[data-theme="dark"] .mh-shell {
   background:
-    radial-gradient(circle at 18% -8%, rgba(79, 198, 184, 0.16), transparent 28%),
-    radial-gradient(circle at 102% 18%, rgba(212, 167, 103, 0.13), transparent 34%),
-    linear-gradient(180deg, #0d1312 0%, var(--mh-bg) 100%);
+    radial-gradient(circle at 18% -8%, rgba(96, 165, 250, 0.16), transparent 28%),
+    radial-gradient(circle at 102% 18%, rgba(56, 189, 248, 0.13), transparent 34%),
+    linear-gradient(180deg, #0c1424 0%, var(--mh-bg) 100%);
 }
 
 .mh-sidebar {
   background:
-    linear-gradient(180deg, rgba(14, 44, 39, 0.98), rgba(18, 32, 29, 0.98)),
+    linear-gradient(180deg, rgba(29, 78, 216, 0.96), rgba(15, 23, 42, 0.98)),
     var(--mh-auth-image) 28% center / cover no-repeat;
   border-right: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 18px 0 52px rgba(19, 32, 28, 0.12);
+  box-shadow: 18px 0 52px rgba(25, 51, 96, 0.14);
 }
 
 .mh-sidebar::before {
-  background: linear-gradient(180deg, rgba(7, 18, 16, 0.76), rgba(7, 18, 16, 0.92));
+  background: linear-gradient(180deg, rgba(16, 55, 130, 0.72), rgba(10, 24, 52, 0.92));
   content: "";
   inset: 0;
   pointer-events: none;
@@ -2121,7 +2121,7 @@ code {
 .mh-topbar {
   background: color-mix(in srgb, var(--mh-panel-solid) 78%, transparent);
   border-color: var(--mh-line);
-  box-shadow: 0 12px 36px rgba(23, 35, 30, 0.06);
+  box-shadow: 0 12px 36px rgba(35, 56, 94, 0.06);
 }
 
 :root[data-theme="dark"] .mh-topbar {
@@ -2182,14 +2182,14 @@ code {
 
 .mh-member-card {
   background:
-    radial-gradient(circle at top right, rgba(212, 167, 103, 0.36), transparent 30%),
-    linear-gradient(135deg, #12352f, #0f766e 54%, #13201d);
+    radial-gradient(circle at top right, rgba(14, 165, 233, 0.34), transparent 30%),
+    linear-gradient(135deg, #1e3a8a, #2563eb 54%, #0f172a);
 }
 
 @media (max-width: 900px) {
   .mh-sidebar {
     background:
-      linear-gradient(90deg, rgba(14, 44, 39, 0.98), rgba(18, 32, 29, 0.98)),
+      linear-gradient(90deg, rgba(29, 78, 216, 0.96), rgba(15, 23, 42, 0.98)),
       var(--mh-auth-image) center / cover no-repeat;
   }
 }

@@ -604,15 +604,20 @@ function ResourceTable({ addLocalRow, canWrite = false, data, deleteLocalRow, to
     ? [{ key: "password", label: t("auth.newPassword"), type: "password", required: true }]
     : editableFields;
 
-  const statuses = useMemo(() => ["all", ...new Set(rows.map((row) => row.status).filter(Boolean))], [rows]);
+  const orderedRows = useMemo(() => {
+    if (view !== "users") return rows;
+    return [...rows].sort((left, right) => Number(isSuperAdmin(right)) - Number(isSuperAdmin(left)));
+  }, [rows, view]);
+
+  const statuses = useMemo(() => ["all", ...new Set(orderedRows.map((row) => row.status).filter(Boolean))], [orderedRows]);
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    return rows.filter((row) => {
+    return orderedRows.filter((row) => {
       const matchesText = !needle || Object.values(row).join(" ").toLowerCase().includes(needle);
       const matchesStatus = status === "all" || row.status === status;
       return matchesText && matchesStatus;
     });
-  }, [query, rows, status]);
+  }, [orderedRows, query, status]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const visible = filtered.slice((page - 1) * pageSize, page * pageSize);
