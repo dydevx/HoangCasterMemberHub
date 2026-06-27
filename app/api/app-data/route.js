@@ -1,6 +1,5 @@
 import { requireMemberUser } from "@/lib/memberhub/auth";
 import { isCustomer, isStoreOwner, isSuperAdmin, normalizeRole } from "@/lib/memberhub/access";
-import { getDemoRawData } from "@/lib/memberhub/demoData";
 import { routePathFor, routeSlug } from "@/lib/memberhub/slug";
 import { createSupabaseServerClient } from "@/lib/supabaseServer";
 import { NextResponse } from "next/server";
@@ -19,6 +18,24 @@ async function readOptional(supabase, table, select = "*") {
 
 function byId(items) {
   return new Map((items || []).map((item) => [item.id, item]));
+}
+
+function remainingDays(value) {
+  if (!value) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const end = new Date(value);
+  end.setHours(0, 0, 0, 0);
+  return Math.ceil((end.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+function computedSubscriptionStatus(shop) {
+  if (shop?.subscription_status === "suspended" || shop?.status === "locked") return "suspended";
+  const days = shop?.remaining_days ?? remainingDays(shop?.subscription_end_date);
+  if (days === null || days === undefined) return shop?.subscription_status || "active";
+  if (days <= 0) return "expired";
+  if (days <= 30) return "expiring";
+  return "active";
 }
 
 async function readWhereIn(supabase, table, column, values, select = "*") {
@@ -225,6 +242,9 @@ function shapeData(data) {
       ...shop,
       slug: routeSlug(shop),
       store_url: routePathFor(routeSlug(shop)),
+      total_members: data.customers.filter((customer) => customer.shop_id === shop.id).length,
+      remaining_days: shop.remaining_days ?? remainingDays(shop.subscription_end_date),
+      subscription_status: computedSubscriptionStatus(shop),
       owner_name: [
         userMap.get(shop.owner_id)?.name,
         ...(data.storeUsers || [])
@@ -287,13 +307,6 @@ export async function GET(request) {
   }
 
   try {
-    if (!supabase || auth.demo) {
-      return NextResponse.json({
-        ...scopedData(auth.user, shapeData(getDemoRawData())),
-        demo: true
-      });
-    }
-
     if (isStoreOwner(auth.user)) {
       return NextResponse.json(shapeData(await readStoreOwnerData(supabase, auth.user)));
     }

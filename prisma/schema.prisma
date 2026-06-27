@@ -44,6 +44,10 @@ model Shop {
   description String?
   ownerId     Int?         @map("owner_id")
   status      String       @default("active")
+  subscriptionStartDate DateTime? @map("subscription_start_date") @db.Date
+  subscriptionEndDate   DateTime? @map("subscription_end_date") @db.Date
+  subscriptionStatus    String    @default("active") @map("subscription_status")
+  subscriptionPlan      String    @default("standard") @map("subscription_plan")
   createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime     @default(now()) @map("updated_at") @db.Timestamptz(6)
   owner       MemberUser?  @relation("ShopOwner", fields: [ownerId], references: [id], onDelete: SetNull)
@@ -53,6 +57,9 @@ model Shop {
   cards       MembershipCard[]
   transactions Transaction[]
   promotions  Promotion[]
+  levels      MembershipLevel[]
+  pointHistories PointHistory[]
+  subscriptionRenewals SubscriptionRenewal[]
 
   @@index([ownerId])
   @@index([status])
@@ -94,6 +101,7 @@ model Customer {
   shop      Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
   cards     MembershipCard[]
   transactions Transaction[]
+  pointHistories PointHistory[]
 
   @@unique([shopId, slug])
   @@unique([shopId, userId])
@@ -129,6 +137,7 @@ model MembershipCard {
   shopId     Int      @map("shop_id")
   cardNumber String   @unique @map("card_number")
   qrPayload  String?  @map("qr_payload")
+  secureToken String? @unique @map("secure_token")
   points     Int      @default(0)
   tier       String   @default("Silver")
   totalSpend Int      @default(0) @map("total_spend")
@@ -151,6 +160,7 @@ model Transaction {
   customerId  Int      @map("customer_id")
   shopId      Int      @map("shop_id")
   serviceId   Int?     @map("service_id")
+  transactionCode String? @unique @map("transaction_code")
   price       Int      @default(0)
   discount    Int      @default(0)
   tax         Int      @default(0)
@@ -161,12 +171,72 @@ model Transaction {
   customer    Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
   shop        Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
   service     Service? @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  pointHistories PointHistory[]
 
   @@index([customerId])
   @@index([shopId])
   @@index([serviceId])
   @@index([createdAt])
   @@map("transactions")
+}
+
+model MembershipLevel {
+  id              Int      @id @default(autoincrement())
+  shopId          Int      @map("shop_id")
+  name            String
+  color           String?
+  icon            String?
+  minPoints       Int      @default(0) @map("min_points")
+  minSpend        Int      @default(0) @map("min_spend")
+  earnRate        Int      @default(1) @map("earn_rate")
+  discountPercent Int      @default(0) @map("discount_percent")
+  benefits        String?
+  sortOrder       Int      @default(0) @map("sort_order")
+  status          String   @default("active")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+  shop            Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@unique([shopId, name])
+  @@index([shopId])
+  @@map("membership_levels")
+}
+
+model PointHistory {
+  id            Int       @id @default(autoincrement())
+  shopId        Int       @map("shop_id")
+  customerId    Int       @map("customer_id")
+  cardId        Int?      @map("card_id")
+  transactionId Int?      @map("transaction_id")
+  pointsBefore  Int       @default(0) @map("points_before")
+  pointsDelta   Int       @default(0) @map("points_delta")
+  pointsAfter   Int       @default(0) @map("points_after")
+  reason        String?
+  actorId       Int?      @map("actor_id")
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  shop          Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  customer      Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  transaction   Transaction? @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+
+  @@index([shopId])
+  @@index([customerId])
+  @@index([transactionId])
+  @@map("point_histories")
+}
+
+model SubscriptionRenewal {
+  id         Int      @id @default(autoincrement())
+  shopId     Int      @map("shop_id")
+  oldEndDate DateTime? @map("old_end_date") @db.Date
+  newEndDate DateTime  @map("new_end_date") @db.Date
+  months     Int?
+  actorId    Int?     @map("actor_id")
+  note       String?
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  shop       Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@index([shopId])
+  @@map("subscription_renewals")
 }
 
 model Promotion {

@@ -1,6 +1,5 @@
 import { publicUser, signToken, verifyPassword } from "@/lib/memberhub/auth";
 import { normalizeRole, roleMatches } from "@/lib/memberhub/access";
-import { getDemoPasswordForRole, getDemoUserByEmail } from "@/lib/memberhub/demoData";
 import { createSupabaseServerClient } from "@/lib/supabaseServer";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -26,23 +25,7 @@ export async function POST(request) {
   const role = parsed.data.role || "";
 
   if (!supabase) {
-    const demoUser = getDemoUserByEmail(email);
-    const demoPassword = getDemoPasswordForRole(demoUser?.role);
-
-    if (!demoUser || password !== demoPassword) {
-      return NextResponse.json({ error: "Email hoac mat khau khong dung" }, { status: 401 });
-    }
-
-    if (role && !roleMatches(demoUser.role, role)) {
-      return NextResponse.json({ error: "Tai khoan khong thuoc khu vuc dang nhap nay" }, { status: 403 });
-    }
-
-    return NextResponse.json({
-      demo: true,
-      warning: "Supabase is not configured. Running local demo data.",
-      token: signToken({ sub: demoUser.id, role: normalizeRole(demoUser.role), demo: true }),
-      user: publicUser(demoUser)
-    });
+    return NextResponse.json({ error: "Server chua cau hinh Supabase." }, { status: 500 });
   }
 
   const { data: authData } = authClient

@@ -3,10 +3,6 @@ import {
   requireMemberUser,
   verifyPassword
 } from "@/lib/memberhub/auth";
-import {
-  getDemoPasswordForRole,
-  setDemoPasswordForRole
-} from "@/lib/memberhub/demoData";
 import { createSupabaseServerClient } from "@/lib/supabaseServer";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -34,15 +30,8 @@ export async function POST(request) {
 
   const { currentPassword, newPassword } = parsed.data;
 
-  if (!supabase || auth.demo) {
-    const currentDemoPassword = getDemoPasswordForRole(auth.user.role);
-
-    if (currentPassword !== currentDemoPassword) {
-      return NextResponse.json({ error: "Mat khau hien tai khong dung" }, { status: 401 });
-    }
-
-    setDemoPasswordForRole(auth.user.role, newPassword);
-    return NextResponse.json({ ok: true, demo: true });
+  if (!supabase) {
+    return NextResponse.json({ error: "Server chua cau hinh Supabase." }, { status: 500 });
   }
 
   const { data: user, error } = await supabase

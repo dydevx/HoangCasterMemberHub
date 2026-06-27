@@ -49,30 +49,17 @@ const navItems = {
   super_admin: [
     ["overview", "nav.overview", LayoutDashboard],
     ["shops", "nav.shops", Building2],
-    ["storeUsers", "nav.storeOwners", ShieldCheck],
-    ["users", "nav.users", UsersRound],
-    ["customers", "nav.customers", UserRound],
-    ["services", "nav.services", Scissors],
-    ["cards", "nav.cards", CreditCard],
-    ["levels", "nav.levels", Sparkles],
-    ["transactions", "nav.transactions", ReceiptText],
-    ["promotions", "nav.promotions", BadgePercent],
     ["reports", "nav.reports", FileText],
-    ["scan", "nav.scan", ScanLine],
+    ["notifications", "nav.notifications", Bell],
     ["logs", "nav.logs", ShieldCheck],
     ["settings", "nav.settings", Settings]
   ],
   store_owner: [
     ["overview", "nav.overview", LayoutDashboard],
-    ["shop", "nav.shop", Building2],
     ["customers", "nav.customers", UserRound],
     ["services", "nav.services", Scissors],
-    ["cards", "nav.cards", CreditCard],
-    ["levels", "nav.levels", Sparkles],
-    ["transactions", "nav.transactions", ReceiptText],
     ["promotions", "nav.promotions", BadgePercent],
     ["reports", "nav.reports", FileText],
-    ["scan", "nav.scan", ScanLine],
     ["notifications", "nav.notifications", Bell],
     ["settings", "nav.settings", Settings]
   ],
@@ -119,6 +106,33 @@ function money(value) {
 function dateText(value) {
   if (!value) return "-";
   return new Intl.DateTimeFormat("vi-VN", { dateStyle: "medium" }).format(new Date(value));
+}
+
+function daysUntil(value) {
+  if (!value) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const end = new Date(value);
+  end.setHours(0, 0, 0, 0);
+  return Math.ceil((end.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+function subscriptionStatus(row = {}) {
+  if (row.subscription_status === "suspended" || row.status === "locked") return "suspended";
+  const remaining = row.remaining_days ?? daysUntil(row.subscription_end_date);
+  if (remaining === null || remaining === undefined) return row.subscription_status || "active";
+  if (remaining <= 0) return "expired";
+  if (remaining <= 30) return "expiring";
+  return "active";
+}
+
+function subscriptionLabel(t, status) {
+  return {
+    active: t("common.active"),
+    expiring: t("common.expiring"),
+    expired: t("common.expired"),
+    suspended: t("common.suspended")
+  }[status] || status || "-";
 }
 
 function withBasePath(path) {
@@ -540,8 +554,20 @@ function LogoMark() {
 function DashboardView({ addLocalRow, deleteLocalRow, toggleLockRow, updateLocalRow, view, user, data, t }) {
   if (view === "overview") return <Overview data={data} t={t} user={user} />;
   if (view === "reports") return <Reports data={data} t={t} />;
-  if (view === "scan") return <ScanView cards={data.cards} t={t} />;
+  if (view === "scan") return <ScanView addLocalRow={addLocalRow} data={data} t={t} />;
   if (view === "profile") return <Profile customers={data.customers} t={t} updateLocalRow={updateLocalRow} user={user} />;
+  if (view === "customers" && isStoreOwner(user)) {
+    return (
+      <CustomersWorkspace
+        addLocalRow={addLocalRow}
+        data={data}
+        deleteLocalRow={deleteLocalRow}
+        t={t}
+        toggleLockRow={toggleLockRow}
+        updateLocalRow={updateLocalRow}
+      />
+    );
+  }
 
   const key = tableMap[view];
   const rows = data[key] || [];
@@ -575,16 +601,69 @@ function Overview({ data, t, user }) {
     return Date.now() - created.getTime() < 1000 * 60 * 60 * 24 * 30;
   }).length;
   const topServices = rankBy(data.transactions, "service_name", "amount").slice(0, 5);
+  const shopsWithSubscription = data.shops.map((shop) => ({
+    ...shop,
+    computed_subscription_status: subscriptionStatus(shop),
+    computed_remaining_days: shop.remaining_days ?? daysUntil(shop.subscription_end_date)
+  }));
+  const activeShops = shopsWithSubscription.filter((shop) => shop.computed_subscription_status === "active").length;
+  const expiringShops = shopsWithSubscription.filter((shop) => shop.computed_subscription_status === "expiring").length;
+  const expiredShops = shopsWithSubscription.filter((shop) => shop.computed_subscription_status === "expired").length;
+  const alerts = shopsWithSubscription
+    .filter((shop) => shop.computed_subscription_status === "expired" || (shop.computed_remaining_days !== null && shop.computed_remaining_days <= 30))
+    .sort((left, right) => Number(left.computed_remaining_days ?? 9999) - Number(right.computed_remaining_days ?? 9999))
+    .slice(0, 8);
+  const currentShop = isStoreOwner(user) ? shopsWithSubscription[0] : null;
 
   return (
     <>
       <div className="mh-stats">
-        <Stat label={t("dashboard.revenue")} value={money(revenue)} />
-        <Stat label={t("dashboard.customers")} value={data.customers.length} />
-        <Stat label={t("dashboard.transactions")} value={data.transactions.length} />
-        <Stat label={t("dashboard.newCustomers")} value={newCustomers} />
-        <Stat label={t("dashboard.points")} value={points.toLocaleString("vi-VN")} />
+        {isSuperAdmin(user) ? (
+          <>
+            <Stat label={t("dashboard.shops")} value={data.shops.length} />
+            <Stat label={t("dashboard.activeShops")} value={activeShops} />
+            <Stat label={t("dashboard.expiringShops")} value={expiringShops} />
+            <Stat label={t("dashboard.expiredShops")} value={expiredShops} />
+            <Stat label={t("dashboard.customers")} value={data.customers.length} />
+            <Stat label={t("dashboard.newCustomers")} value={newCustomers} />
+            <Stat label={t("dashboard.transactions")} value={data.transactions.length} />
+          </>
+        ) : (
+          <>
+            <Stat label={currentShop?.name || t("shop.name")} value={currentShop?.computed_remaining_days === null ? "-" : `${currentShop?.computed_remaining_days ?? "-"} ${t("common.days")}`} />
+            <Stat label={t("dashboard.customers")} value={data.customers.length} />
+            <Stat label={t("dashboard.newCustomers")} value={newCustomers} />
+            <Stat label={t("dashboard.revenue")} value={money(revenue)} />
+            <Stat label={t("dashboard.transactions")} value={data.transactions.length} />
+            <Stat label={t("dashboard.points")} value={points.toLocaleString("vi-VN")} />
+          </>
+        )}
       </div>
+
+      {isSuperAdmin(user) ? (
+        <section className="mh-card">
+          <PanelTitle icon={Bell} title={t("dashboard.subscriptionAlerts")} />
+          <div className="mh-alert-list">
+            {alerts.map((shop) => (
+              <div className="mh-alert-row" key={shop.id}>
+                <strong>{shop.name}</strong>
+                <span>{shop.computed_subscription_status === "expired" ? t("common.expired") : `${shop.computed_remaining_days} ${t("common.days")}`}</span>
+                <StatusBadge t={t} value={shop.computed_subscription_status} />
+              </div>
+            ))}
+            {!alerts.length ? <div className="mh-empty">{t("common.empty")}</div> : null}
+          </div>
+        </section>
+      ) : null}
+
+      {isStoreOwner(user) && currentShop?.computed_subscription_status === "expiring" ? (
+        <div className="mh-alert warning">
+          {t("dashboard.expiringNotice").replace("{days}", currentShop.computed_remaining_days)}
+        </div>
+      ) : null}
+      {isStoreOwner(user) && currentShop?.computed_subscription_status === "expired" ? (
+        <div className="mh-alert">{t("dashboard.expiredNotice")}</div>
+      ) : null}
 
       <section className="mh-card mh-chart-card">
         <PanelTitle icon={FileText} title={t("dashboard.topServices")} />
@@ -603,6 +682,88 @@ function Overview({ data, t, user }) {
         />
       </section>
     </>
+  );
+}
+
+function CustomersWorkspace({ addLocalRow, data, deleteLocalRow, t, toggleLockRow, updateLocalRow }) {
+  const [tab, setTab] = useState("list");
+  const tabs = [
+    ["list", "customers.list", UserRound],
+    ["levels", "customers.levels", Sparkles],
+    ["transactions", "customers.transactions", ReceiptText],
+    ["scan", "nav.scan", QrCode]
+  ];
+
+  return (
+    <div className="mh-resource">
+      <div className="mh-quick-actions">
+        <button className="mh-primary slim" type="button" onClick={() => setTab("list")}>
+          <Plus size={17} />
+          {t("customers.addCustomer")}
+        </button>
+        <button className="mh-tool-button" type="button" onClick={() => setTab("scan")}>
+          <QrCode size={17} />
+          {t("customers.scanQr")}
+        </button>
+        <button className="mh-tool-button" type="button" onClick={() => exportCsv("customers.csv", data.customers, getColumns("customers", t, data))}>
+          <Download size={17} />
+          {t("common.exportCsv")}
+        </button>
+      </div>
+      <div className="mh-role-tabs">
+        {tabs.map(([id, labelKey, Icon]) => (
+          <button className={tab === id ? "active" : ""} key={id} type="button" onClick={() => setTab(id)}>
+            <Icon size={17} />
+            {t(labelKey)}
+          </button>
+        ))}
+      </div>
+      {tab === "list" ? (
+        <ResourceTable
+          addLocalRow={addLocalRow}
+          canWrite
+          collection="customers"
+          columns={getColumns("customers", t, data)}
+          data={data}
+          deleteLocalRow={deleteLocalRow}
+          rows={data.customers}
+          t={t}
+          toggleLockRow={toggleLockRow}
+          updateLocalRow={updateLocalRow}
+          view="customers"
+        />
+      ) : null}
+      {tab === "levels" ? (
+        <ResourceTable
+          addLocalRow={addLocalRow}
+          canWrite
+          collection="levels"
+          columns={getColumns("levels", t, data)}
+          data={data}
+          deleteLocalRow={deleteLocalRow}
+          rows={data.levels}
+          t={t}
+          toggleLockRow={toggleLockRow}
+          updateLocalRow={updateLocalRow}
+          view="levels"
+        />
+      ) : null}
+      {tab === "transactions" ? (
+        <ResourceTable
+          addLocalRow={addLocalRow}
+          canWrite
+          collection="transactions"
+          columns={getColumns("transactions", t, data)}
+          data={data}
+          deleteLocalRow={deleteLocalRow}
+          rows={data.transactions}
+          t={t}
+          updateLocalRow={updateLocalRow}
+          view="transactions"
+        />
+      ) : null}
+      {tab === "scan" ? <ScanView addLocalRow={addLocalRow} data={data} t={t} /> : null}
+    </div>
   );
 }
 
@@ -936,9 +1097,13 @@ function CustomerCards({ cards, t }) {
   );
 }
 
-function ScanView({ cards, t }) {
+function ScanView({ addLocalRow, data, t }) {
+  const cards = data.cards || [];
   const [code, setCode] = useState(cards[0]?.card_number || "");
-  const card = cards.find((item) => item.card_number.toLowerCase() === code.trim().toLowerCase());
+  const card = cards.find((item) => {
+    const needle = code.trim().toLowerCase();
+    return [item.card_number, item.secure_token, item.qr_payload].filter(Boolean).some((value) => String(value).toLowerCase().includes(needle));
+  });
 
   return (
     <div className="mh-grid two">
@@ -956,14 +1121,73 @@ function ScanView({ cards, t }) {
         <PanelTitle icon={UserRound} title={t("scan.result")} />
         {card ? (
           <div className="mh-scan-result">
-            <img alt={t("card.qr")} src={qrUrl(card.qr_payload || card.card_number)} />
+            <img alt={t("card.qr")} src={qrUrl(card.qr_payload || card.secure_token || card.card_number)} />
             <h2>{card.customer_name}</h2>
             <p>{card.shop_name}</p>
             <strong>{card.tier} - {Number(card.points || 0).toLocaleString("vi-VN")} {t("common.points")}</strong>
+            {addLocalRow ? <RecordTransactionForm addLocalRow={addLocalRow} card={card} data={data} t={t} /> : null}
           </div>
         ) : <div className="mh-empty">{t("common.empty")}</div>}
       </section>
     </div>
+  );
+}
+
+function RecordTransactionForm({ addLocalRow, card, data, t }) {
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const services = (data.services || []).filter((service) => service.shop_id === card.shop_id);
+
+  async function submit(event) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const serviceId = Number(form.get("service_id") || 0);
+    const service = services.find((item) => item.id === serviceId);
+    const amount = Number(form.get("amount") || service?.price || 0);
+
+    try {
+      setSaving(true);
+      setError("");
+      await addLocalRow("transactions", {
+        shop_id: card.shop_id,
+        customer_id: card.customer_id,
+        service_id: serviceId || null,
+        price: amount,
+        amount,
+        note: form.get("note") || ""
+      });
+      event.currentTarget.reset();
+    } catch (transactionError) {
+      setError(transactionError.message || "Khong the ghi nhan giao dich.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form className="mh-form mh-transaction-form" onSubmit={submit}>
+      <label>
+        {t("service.name")}
+        <select name="service_id" defaultValue="">
+          <option value="">-</option>
+          {services.map((service) => (
+            <option key={service.id} value={service.id}>{service.name} - {money(service.price)}</option>
+          ))}
+        </select>
+      </label>
+      <label>
+        {t("transaction.total")}
+        <input name="amount" type="number" min="0" required />
+      </label>
+      <label>
+        {t("transaction.note")}
+        <textarea name="note" rows={2} />
+      </label>
+      {error ? <div className="mh-alert">{error}</div> : null}
+      <button className="mh-primary slim" type="submit" disabled={saving}>
+        {saving ? t("common.loading") : t("transactions.record")}
+      </button>
+    </form>
   );
 }
 
@@ -1205,12 +1429,18 @@ function getColumns(view, t, data = {}) {
   const columns = {
     shops: [
       { key: "name", label: t("shop.name") },
-      linkColumn("store_url", t("common.link")),
       { key: "owner_name", label: t("shop.owner") },
-      { key: "phone", label: t("shop.phone") },
       { key: "email", label: t("shop.email") },
-      { key: "address", label: t("shop.address") },
-      statusColumn
+      { key: "phone", label: t("shop.phone") },
+      { key: "subscription_plan", label: t("subscription.plan") },
+      { key: "subscription_start_date", label: t("subscription.start"), render: (row) => dateText(row.subscription_start_date) },
+      { key: "subscription_end_date", label: t("subscription.end"), render: (row) => dateText(row.subscription_end_date) },
+      { key: "remaining_days", label: t("subscription.remaining"), render: (row) => {
+        const remaining = row.remaining_days ?? daysUntil(row.subscription_end_date);
+        return remaining === null || remaining === undefined ? "-" : `${remaining} ${t("common.days")}`;
+      } },
+      { key: "total_members", label: t("dashboard.customers") },
+      { key: "subscription_status", label: t("common.status"), render: (row) => <StatusBadge t={t} value={subscriptionStatus(row)} /> }
     ],
     shop: [
       { key: "name", label: t("shop.name") },
@@ -1270,6 +1500,7 @@ function getColumns(view, t, data = {}) {
       statusColumn
     ],
     transactions: [
+      { key: "transaction_code", label: t("transaction.code") },
       { key: "customer_name", label: t("customer.name") },
       { key: "service_name", label: t("service.name") },
       { key: "shop_name", label: t("shop.name") },
@@ -1334,21 +1565,47 @@ function getEditableFields(view, t, data = {}) {
 
   const fields = {
     shops: [
-      { key: "name", label: t("shop.name") },
-      { key: "owner_id", label: idLabel(t("shop.owner")), type: "number", options: ownerOptions },
+      { key: "name", label: t("shop.name"), required: true },
+      { key: "logo_data_url", label: t("shop.logo") },
       { key: "phone", label: t("shop.phone") },
       { key: "email", label: t("shop.email"), type: "email" },
       { key: "address", label: t("shop.address") },
+      { key: "slug", label: t("shop.code") },
+      { key: "owner_id", label: idLabel(t("shop.owner")), type: "number", options: ownerOptions },
+      { key: "owner_name", label: t("owner.name"), addOnly: true },
+      { key: "owner_email", label: t("owner.email"), type: "email", addOnly: true },
+      { key: "owner_phone", label: t("owner.phone"), addOnly: true },
+      { key: "owner_password", label: t("owner.tempPassword"), type: "password", addOnly: true, placeholder: "Owner@123" },
+      { key: "subscription_plan", label: t("subscription.plan"), defaultValue: "standard", options: [
+        { value: "starter", label: "Starter" },
+        { value: "standard", label: "Standard" },
+        { value: "premium", label: "Premium" }
+      ] },
+      { key: "subscription_start_date", label: t("subscription.start"), type: "date" },
+      { key: "subscription_months", label: t("subscription.months"), type: "number", addOnly: true, defaultValue: "1", options: [
+        { value: "1", label: "1" },
+        { value: "3", label: "3" },
+        { value: "6", label: "6" },
+        { value: "12", label: "12" }
+      ] },
+      { key: "subscription_end_date", label: t("subscription.end"), type: "date" },
       { key: "description", label: t("service.description"), multiline: true },
-      { key: "status", label: t("common.status"), defaultValue: "active", options: statusOptions.activeLocked }
+      { key: "subscription_status", label: t("common.status"), defaultValue: "active", options: [
+        { value: "active", label: t("common.active") },
+        { value: "expiring", label: t("common.expiring") },
+        { value: "expired", label: t("common.expired") },
+        { value: "suspended", label: t("common.suspended") }
+      ] },
+      { key: "status", label: t("shop.systemStatus"), defaultValue: "active", options: statusOptions.activeLocked }
     ],
     shop: [
       { key: "name", label: t("shop.name") },
+      { key: "logo_data_url", label: t("shop.logo") },
       { key: "phone", label: t("shop.phone") },
       { key: "email", label: t("shop.email"), type: "email" },
       { key: "address", label: t("shop.address") },
       { key: "description", label: t("service.description"), multiline: true },
-      { key: "status", label: t("common.status"), defaultValue: "active", options: statusOptions.activeLocked }
+      { key: "status", label: t("shop.systemStatus"), defaultValue: "active", options: statusOptions.activeLocked }
     ],
     storeUsers: [
       { key: "store_id", label: t("shop.name"), type: "number", required: true, options: shopOptions },
@@ -1371,7 +1628,7 @@ function getEditableFields(view, t, data = {}) {
     customers: [
       { key: "shop_id", label: t("shop.name"), type: "number", required: true, options: shopOptions },
       { key: "name", label: t("customer.name"), required: true },
-      { key: "email", label: t("customer.email"), type: "email", required: true },
+      { key: "email", label: t("customer.email"), type: "email" },
       { key: "password", label: t("auth.password"), type: "password", addOnly: true, placeholder: "Customer@123" },
       { key: "phone", label: t("customer.phone") },
       { key: "birthday", label: t("customer.birthday"), type: "date" },
@@ -1396,6 +1653,7 @@ function getEditableFields(view, t, data = {}) {
       { key: "shop_id", label: t("shop.name"), type: "number", options: shopOptions },
       { key: "customer_id", label: t("customer.name"), type: "number", options: customerOptions },
       { key: "card_number", label: t("card.number") },
+      { key: "secure_token", label: t("card.secureToken") },
       { key: "points", label: t("common.points"), type: "number" },
       { key: "tier", label: t("card.tier"), defaultValue: "Silver", options: [
         { value: "Silver", label: "Silver" },
@@ -1469,7 +1727,9 @@ function StatusBadge({ t, value }) {
     active: t("common.active"),
     inactive: t("common.inactive"),
     locked: t("common.locked"),
+    expiring: t("common.expiring"),
     expired: t("common.expired"),
+    suspended: t("common.suspended"),
     read: t("common.read"),
     unread: t("common.unread")
   }[status] || status;

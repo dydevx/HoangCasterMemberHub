@@ -2,12 +2,13 @@ import { hashPassword, requireMemberUser } from "@/lib/memberhub/auth";
 import { isCustomer, isStoreOwner, isSuperAdmin, normalizeRole, toLegacyRole } from "@/lib/memberhub/access";
 import { slugify } from "@/lib/memberhub/slug";
 import { createSupabaseServerClient } from "@/lib/supabaseServer";
+import crypto from "node:crypto";
 import { NextResponse } from "next/server";
 
 const resources = {
   shops: {
     table: "shops",
-    fields: ["name", "slug", "address", "phone", "email", "description", "owner_id", "status"],
+    fields: ["name", "slug", "address", "phone", "email", "logo_data_url", "description", "owner_id", "status", "subscription_start_date", "subscription_end_date", "subscription_status", "subscription_plan"],
     adminOnlyCreate: true
   },
   storeUsers: {
@@ -28,17 +29,17 @@ const resources = {
   },
   levels: {
     table: "membership_levels",
-    fields: ["shop_id", "name", "min_points", "min_spend", "discount_percent", "benefits", "status"],
+    fields: ["shop_id", "name", "color", "icon", "min_points", "min_spend", "earn_rate", "discount_percent", "benefits", "sort_order", "status"],
     needsShop: true
   },
   cards: {
     table: "membership_cards",
-    fields: ["customer_id", "shop_id", "card_number", "qr_payload", "points", "tier", "total_spend", "expires_at", "status"],
+    fields: ["customer_id", "shop_id", "card_number", "secure_token", "qr_payload", "points", "tier", "total_spend", "expires_at", "status"],
     needsShop: true
   },
   transactions: {
     table: "transactions",
-    fields: ["customer_id", "shop_id", "service_id", "price", "discount", "tax", "amount", "points_delta", "note"],
+    fields: ["customer_id", "shop_id", "service_id", "transaction_code", "price", "discount", "tax", "amount", "points_delta", "note"],
     needsShop: true
   },
   promotions: {
@@ -76,6 +77,8 @@ const numericFields = new Set([
   "total_spend",
   "min_points",
   "min_spend",
+  "earn_rate",
+  "sort_order",
   "discount_percent",
   "discount_amount",
   "discount",
@@ -105,6 +108,42 @@ function cleanPayload(body, config) {
   }, {});
 }
 
+function secureToken(bytes = 24) {
+  return crypto.randomBytes(bytes).toString("base64url");
+}
+
+function todayDate() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function addMonths(dateValue, months) {
+  const date = new Date(dateValue || todayDate());
+  date.setMonth(date.getMonth() + Number(months || 1));
+  return date.toISOString().slice(0, 10);
+}
+
+function daysUntil(value) {
+  if (!value) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const end = new Date(value);
+  end.setHours(0, 0, 0, 0);
+  return Math.ceil((end.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+function nextSubscriptionStatus(shop) {
+  if (shop?.subscription_status === "suspended" || shop?.status === "locked") return "suspended";
+  const remaining = daysUntil(shop?.subscription_end_date);
+  if (remaining === null) return shop?.subscription_status || "active";
+  if (remaining <= 0) return "expired";
+  if (remaining <= 30) return "expiring";
+  return "active";
+}
+
+function publicMemberPath(token) {
+  return `/member/${token}`;
+}
+
 async function getOwnedShopIds(supabase, user) {
   if (isSuperAdmin(user)) {
     const { data, error } = await supabase.from("shops").select("id").order("id", { ascending: true });
@@ -127,6 +166,16 @@ async function getOwnedShopIds(supabase, user) {
 }
 
 async function assertCanWrite(supabase, user, config, payload, id) {
+  const tenantOperationTables = new Set([
+    "customers",
+    "services",
+    "membership_levels",
+    "membership_cards",
+    "transactions",
+    "promotions",
+    "settings"
+  ]);
+
   if (isCustomer(user)) {
     if (config.table === "customers" && id) {
       const { data, error } = await supabase
@@ -162,6 +211,9 @@ async function assertCanWrite(supabase, user, config, payload, id) {
   }
 
   if (isSuperAdmin(user)) {
+    if (tenantOperationTables.has(config.table)) {
+      return { error: "Super Admin chi quan ly cua hang, tai khoan va bao cao tong quan", status: 403 };
+    }
     return {};
   }
 
@@ -201,6 +253,19 @@ async function assertCanWrite(supabase, user, config, payload, id) {
 
     if (config.table !== "shops" && rowShopId && !ownedShopIds.includes(Number(rowShopId))) {
       return { error: "Khong duoc sua du lieu cua cua hang khac", status: 403 };
+    }
+  }
+
+  if (config.needsShop && payload.shop_id) {
+    const { data: shop } = await supabase
+      .from("shops")
+      .select("id,status,subscription_status,subscription_end_date")
+      .eq("id", payload.shop_id)
+      .maybeSingle();
+
+    const readonlyStatus = nextSubscriptionStatus(shop);
+    if (readonlyStatus === "expired" || readonlyStatus === "suspended") {
+      return { error: "Cua hang da het han hoac dang bi khoa, chi duoc xem du lieu", status: 403 };
     }
   }
 
@@ -244,6 +309,20 @@ async function applyTransactionToCard(supabase, transaction, previous = null) {
     points: Math.max(0, Number(card.points || 0) + pointDiff),
     total_spend: Math.max(0, Number(card.total_spend || 0) + spendDiff)
   };
+
+  const { data: levels } = await supabase
+    .from("membership_levels")
+    .select("name,min_points,min_spend,status")
+    .eq("shop_id", transaction.shop_id)
+    .eq("status", "active");
+  const nextTier = (levels || [])
+    .filter((level) => updatePayload.points >= Number(level.min_points || 0) && updatePayload.total_spend >= Number(level.min_spend || 0))
+    .sort((left, right) => Number(right.min_points || 0) + Number(right.min_spend || 0) - Number(left.min_points || 0) - Number(left.min_spend || 0))[0]?.name;
+
+  if (nextTier) {
+    updatePayload.tier = nextTier;
+  }
+
   const { error: updateError } = await supabase
     .from("membership_cards")
     .update(updatePayload)
@@ -255,6 +334,22 @@ async function applyTransactionToCard(supabase, transaction, previous = null) {
       .update({ points: updatePayload.points })
       .eq("id", card.id);
   }
+
+  try {
+    await supabase
+      .from("point_histories")
+      .insert({
+      shop_id: transaction.shop_id,
+      customer_id: transaction.customer_id,
+      card_id: card.id,
+      transaction_id: transaction.id || null,
+      points_before: Number(card.points || 0),
+      points_delta: pointDiff,
+      points_after: updatePayload.points,
+      reason: "transaction",
+      actor_id: transaction.actor_id || null
+      });
+  } catch {}
 }
 
 function prepareUserPayload(body, payload, mode) {
@@ -315,6 +410,24 @@ async function defaultShopId(supabase, user) {
   return ids[0] || null;
 }
 
+async function settingValue(supabase, shopId, key, fallback) {
+  const { data } = await supabase
+    .from("settings")
+    .select("value")
+    .eq("shop_id", shopId)
+    .eq("key", key)
+    .maybeSingle();
+
+  return data?.value ?? fallback;
+}
+
+async function pointsForTransaction(supabase, payload) {
+  const amount = Number(payload.amount || 0);
+  const rateValue = await settingValue(supabase, payload.shop_id, "points_vnd_per_point", "10000").catch(() => "10000");
+  const vndPerPoint = Math.max(1, Number(String(rateValue).replace(/[^0-9.]/g, "")) || 10000);
+  return Math.floor(amount / vndPerPoint);
+}
+
 async function memberUserExists(supabase, userId) {
   if (!userId) return false;
 
@@ -330,7 +443,7 @@ async function memberUserExists(supabase, userId) {
 function customerEmail(payload, id = null) {
   const email = String(payload.email || "").trim().toLowerCase();
   if (email) return email;
-  return id ? `customer-${id}@memberhub.local` : "";
+  return id ? `customer-${id}@memberhub.local` : `customer-${Date.now()}-${secureToken(4)}@memberhub.local`;
 }
 
 async function ensureCustomerUser(supabase, payload, body) {
@@ -343,10 +456,6 @@ async function ensureCustomerUser(supabase, payload, body) {
   }
 
   const email = customerEmail(payload);
-  if (!email) {
-    return { error: "Khach hang can email de tao tai khoan dang nhap", status: 400 };
-  }
-
   payload.email = email;
   const { data: existingUser, error: existingUserError } = await supabase
     .from("member_users")
@@ -461,12 +570,67 @@ async function writeResource(request, params, mode) {
     payload.slug = slugify(payload.slug);
   }
 
-  if (collection === "cards" && !payload.qr_payload && payload.card_number) {
-    payload.qr_payload = `memberhub://card/${payload.card_number}`;
+  if (collection === "cards") {
+    payload.secure_token = payload.secure_token || secureToken();
+    payload.card_number = payload.card_number || `MC${String(payload.shop_id || "0").padStart(3, "0")}${Date.now()}`;
+    payload.qr_payload = payload.qr_payload || publicMemberPath(payload.secure_token);
+    payload.points = payload.points ?? 0;
+    payload.total_spend = payload.total_spend ?? 0;
+    payload.tier = payload.tier || "Member";
+    payload.status = payload.status || "active";
   }
 
   if (collection === "shops" && !payload.owner_id && isStoreOwner(auth.user)) {
     payload.owner_id = auth.user.id;
+  }
+
+  if (collection === "shops") {
+    payload.subscription_start_date = payload.subscription_start_date || todayDate();
+    if (!payload.subscription_end_date && body.subscription_months) {
+      payload.subscription_end_date = addMonths(payload.subscription_start_date, body.subscription_months);
+    }
+    payload.subscription_status = payload.subscription_status || nextSubscriptionStatus(payload);
+    payload.subscription_plan = payload.subscription_plan || "standard";
+
+    if (mode === "post" && !payload.owner_id && body.owner_email) {
+      const ownerEmail = String(body.owner_email || "").trim().toLowerCase();
+      const { data: existingOwner, error: existingOwnerError } = await supabase
+        .from("member_users")
+        .select("id,role")
+        .eq("email", ownerEmail)
+        .maybeSingle();
+
+      if (existingOwnerError) {
+        return NextResponse.json({ error: existingOwnerError.message }, { status: 400 });
+      }
+
+      if (existingOwner?.id) {
+        if (isCustomer(existingOwner.role)) {
+          return NextResponse.json({ error: "Email chu cua hang dang thuoc tai khoan khach hang" }, { status: 400 });
+        }
+        payload.owner_id = existingOwner.id;
+      } else {
+        const ownerPassword = String(body.owner_password || "").trim() || "Owner@123";
+        const { data: ownerUser, error: ownerError } = await supabase
+          .from("member_users")
+          .insert({
+            name: String(body.owner_name || payload.name || ownerEmail).trim(),
+            email: ownerEmail,
+            phone: String(body.owner_phone || payload.phone || "").trim() || null,
+            role: "owner",
+            status: "active",
+            ...hashPassword(ownerPassword)
+          })
+          .select("id")
+          .single();
+
+        if (ownerError) {
+          return NextResponse.json({ error: ownerError.message }, { status: 400 });
+        }
+
+        payload.owner_id = ownerUser.id;
+      }
+    }
   }
 
   if (collection === "transactions") {
@@ -477,8 +641,10 @@ async function writeResource(request, params, mode) {
     }
 
     if (payload.points_delta === undefined || payload.points_delta === null) {
-      payload.points_delta = Math.floor(Number(payload.amount || 0) / 10000);
+      payload.points_delta = await pointsForTransaction(supabase, payload);
     }
+
+    payload.transaction_code = payload.transaction_code || `TX-${Date.now()}-${secureToken(5)}`.toUpperCase();
   }
 
   const permission = await assertCanWrite(supabase, auth.user, config, payload, id);
@@ -569,6 +735,32 @@ async function writeResource(request, params, mode) {
   const { data, error } = await runMutation(supabase, config, mode, payload, id);
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });
+  }
+
+  if (collection === "customers" && mode === "post") {
+    const token = secureToken();
+    const cardNumber = `MC${String(data.shop_id).padStart(3, "0")}${String(data.id).padStart(6, "0")}`;
+    const { data: lowestLevel } = await supabase
+      .from("membership_levels")
+      .select("name,min_points,min_spend,status")
+      .eq("shop_id", data.shop_id)
+      .eq("status", "active")
+      .order("min_points", { ascending: true })
+      .order("min_spend", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    await runMutation(supabase, resources.cards, "post", {
+      customer_id: data.id,
+      shop_id: data.shop_id,
+      card_number: cardNumber,
+      secure_token: token,
+      qr_payload: publicMemberPath(token),
+      points: 0,
+      tier: lowestLevel?.name || "Member",
+      total_spend: 0,
+      status: "active"
+    });
   }
 
   if (collection === "storeUsers") {
