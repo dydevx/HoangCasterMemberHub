@@ -258,8 +258,8 @@ function shapeData(data) {
           .filter((item) => item.store_id === shop.id && item.user_id !== shop.owner_id)
           .map((item) => item.user_id))]
           .length;
-        if (!ownerName) return staffCount ? `+ ${staffCount} nhan vien` : "";
-        return staffCount ? `${ownerName} + ${staffCount} nhan vien` : ownerName;
+        if (!ownerName) return staffCount ? `+ ${staffCount} nhân viên` : "";
+        return staffCount ? `${ownerName} + ${staffCount} nhân viên` : ownerName;
       })()
     })),
     storeUsers: (data.storeUsers || []).map((item) => ({

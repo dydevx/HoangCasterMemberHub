@@ -135,6 +135,32 @@ function subscriptionLabel(t, status) {
   }[status] || status || "-";
 }
 
+function planLabel(t, value) {
+  return {
+    starter: t("subscription.starter"),
+    standard: t("subscription.standard"),
+    premium: t("subscription.premium")
+  }[value] || value || "-";
+}
+
+function statusLabel(t, value) {
+  return {
+    active: t("common.active"),
+    inactive: t("common.inactive"),
+    locked: t("common.locked"),
+    expiring: t("common.expiring"),
+    expired: t("common.expired"),
+    suspended: t("common.suspended"),
+    read: t("common.read"),
+    unread: t("common.unread")
+  }[value] || value || "-";
+}
+
+function displayAccountName(user, t) {
+  if (isSuperAdmin(user)) return t("app.admin");
+  return user?.name || "-";
+}
+
 function todayInputDate() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -473,7 +499,7 @@ function MemberHubAppContent({ locale, setLocale }) {
               <LanguageSwitcher locale={locale} setLocale={setLocale} t={t} />
             ) : null}
             <ThemeToggle setTheme={setTheme} t={t} theme={theme} />
-            <span>{user.name}</span>
+            <span>{displayAccountName(user, t)}</span>
             <button type="button" onClick={() => setPasswordModalOpen(true)} title={t("auth.changePassword")}>
               <Lock size={17} aria-hidden="true" />
               <span>{t("auth.changePassword")}</span>
@@ -872,33 +898,37 @@ function ResourceTable({ addLocalRow, canWrite = false, data, deleteLocalRow, to
     <div className={`mh-resource ${compact ? "compact" : ""}`}>
       {!compact ? (
         <div className="mh-toolbar">
-          <label className="mh-search">
-            <Search size={17} />
-            <input aria-label={t("common.search")} placeholder={t("common.search")} value={query} onChange={(event) => setQuery(event.target.value)} />
-          </label>
-          <label className="mh-select">
-            <ListFilter size={17} />
-            <select aria-label={t("common.filter")} value={status} onChange={(event) => setStatus(event.target.value)}>
-              {statuses.map((item) => <option key={item} value={item}>{item === "all" ? t("common.all") : item}</option>)}
-            </select>
-          </label>
-          <button className="mh-tool-button" type="button" onClick={() => exportCsv(`${view}.csv`, filtered, columns)}>
-            <Download size={17} />
-            {t("common.exportCsv")}
-          </button>
-          <button className="mh-tool-button" type="button" onClick={() => window.print()}>
-            <FileText size={17} />
-            {t("common.printPdf")}
-          </button>
-          {collection && canWrite && addLocalRow ? (
-            <button className="mh-primary slim" type="button" onClick={() => {
-              setEditingRow(null);
-              setModalMode("add");
-            }}>
-              <Plus size={17} />
-              {t("common.add")}
+          <div className="mh-toolbar-main">
+            <label className="mh-search">
+              <Search size={17} />
+              <input aria-label={t("common.search")} placeholder={t("common.search")} value={query} onChange={(event) => setQuery(event.target.value)} />
+            </label>
+            <label className="mh-select">
+              <ListFilter size={17} />
+              <select aria-label={t("common.filter")} value={status} onChange={(event) => setStatus(event.target.value)}>
+                {statuses.map((item) => <option key={item} value={item}>{item === "all" ? t("common.all") : statusLabel(t, item)}</option>)}
+              </select>
+            </label>
+          </div>
+          <div className="mh-toolbar-actions">
+            <button className="mh-tool-button" type="button" onClick={() => exportCsv(`${view}.csv`, filtered, columns)}>
+              <Download size={17} />
+              {t("common.exportData")}
             </button>
-          ) : null}
+            <button className="mh-tool-button" type="button" onClick={() => window.print()}>
+              <FileText size={17} />
+              {t("common.print")}
+            </button>
+            {collection && canWrite && addLocalRow ? (
+              <button className="mh-primary slim" type="button" onClick={() => {
+                setEditingRow(null);
+                setModalMode("add");
+              }}>
+                <Plus size={17} />
+                {t("common.add")}
+              </button>
+            ) : null}
+          </div>
         </div>
       ) : null}
 
@@ -1174,9 +1204,9 @@ function ShopFormModal({ data, mode, row, title, onClose, onSave, t }) {
             <legend>{t("subscription.section")}</legend>
             <label>{t("subscription.plan")}
               <select name="subscription_plan" defaultValue={row?.subscription_plan || "standard"}>
-                <option value="starter">Starter</option>
-                <option value="standard">Standard</option>
-                <option value="premium">Premium</option>
+                <option value="starter">{t("subscription.starter")}</option>
+                <option value="standard">{t("subscription.standard")}</option>
+                <option value="premium">{t("subscription.premium")}</option>
               </select>
             </label>
             <label>{t("subscription.start")}<input name="subscription_start_date" type="date" value={startDate} required onChange={(event) => setStartDate(event.target.value)} /></label>
@@ -1244,9 +1274,9 @@ function RenewShopModal({ row, onClose, onSave, t }) {
         <form className="mh-form" onSubmit={submit}>
           <label>{t("subscription.plan")}
             <select name="subscription_plan" defaultValue={row?.subscription_plan || "standard"}>
-              <option value="starter">Starter</option>
-              <option value="standard">Standard</option>
-              <option value="premium">Premium</option>
+              <option value="starter">{t("subscription.starter")}</option>
+              <option value="standard">{t("subscription.standard")}</option>
+              <option value="premium">{t("subscription.premium")}</option>
             </select>
           </label>
           <label>{t("subscription.start")}<input type="date" value={startDate} required onChange={(event) => setStartDate(event.target.value)} /></label>
@@ -1287,7 +1317,7 @@ function ShopDetailModal({ data, row, onClose, t }) {
           <span>{t("shop.owner")}</span><strong>{owner?.name || "-"}</strong>
           <span>{t("owner.email")}</span><strong>{owner?.email || "-"}</strong>
           <span>{t("dashboard.customers")}</span><strong>{row?.total_members ?? 0}</strong>
-          <span>{t("subscription.plan")}</span><strong>{row?.subscription_plan || "-"}</strong>
+          <span>{t("subscription.plan")}</span><strong>{planLabel(t, row?.subscription_plan)}</strong>
           <span>{t("subscription.start")}</span><strong>{dateText(row?.subscription_start_date)}</strong>
           <span>{t("subscription.end")}</span><strong>{dateText(row?.subscription_end_date)}</strong>
           <span>{t("subscription.remaining")}</span><strong>{row?.remaining_days === null || row?.remaining_days === undefined ? "-" : `${row.remaining_days} ${t("common.days")}`}</strong>
@@ -1566,7 +1596,7 @@ function TableRow({ canWrite, collection, columns, compact, data, deleteLocalRow
   return (
     <tr>
       {columns.map((column) => (
-        <td key={column.key}>{column.render ? column.render(row) : formatCell(row[column.key])}</td>
+        <td data-label={column.label} key={column.key}>{column.render ? column.render(row) : formatCell(row[column.key])}</td>
       ))}
       {!compact && canWrite ? (
         <td>
@@ -2077,7 +2107,7 @@ function getColumns(view, t, data = {}) {
       { key: "owner_name", label: t("shop.owner") },
       { key: "email", label: t("shop.email") },
       { key: "phone", label: t("shop.phone") },
-      { key: "subscription_plan", label: t("subscription.plan") },
+      { key: "subscription_plan", label: t("subscription.plan"), render: (row) => <span className="mh-plan-badge">{planLabel(t, row.subscription_plan)}</span> },
       { key: "subscription_start_date", label: t("subscription.start"), render: (row) => dateText(row.subscription_start_date) },
       { key: "subscription_end_date", label: t("subscription.end"), render: (row) => dateText(row.subscription_end_date) },
       { key: "remaining_days", label: t("subscription.remaining"), render: (row) => {
@@ -2222,9 +2252,9 @@ function getEditableFields(view, t, data = {}) {
       { key: "owner_phone", label: t("owner.phone"), addOnly: true },
       { key: "owner_password", label: t("owner.tempPassword"), type: "password", addOnly: true, placeholder: "Owner@123" },
       { key: "subscription_plan", label: t("subscription.plan"), defaultValue: "standard", options: [
-        { value: "starter", label: "Starter" },
-        { value: "standard", label: "Standard" },
-        { value: "premium", label: "Premium" }
+        { value: "starter", label: t("subscription.starter") },
+        { value: "standard", label: t("subscription.standard") },
+        { value: "premium", label: t("subscription.premium") }
       ] },
       { key: "subscription_start_date", label: t("subscription.start"), type: "date" },
       { key: "subscription_months", label: t("subscription.months"), type: "number", addOnly: true, defaultValue: "1", options: [
