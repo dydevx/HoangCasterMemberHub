@@ -1882,6 +1882,60 @@ code {
   width: 100%;
 }
 
+.mh-wide-modal {
+  max-width: 760px;
+}
+
+.mh-form-section {
+  border: 1px solid var(--mh-line);
+  border-radius: 8px;
+  display: grid;
+  gap: 0.8rem;
+  margin: 0;
+  padding: 0.9rem;
+}
+
+.mh-form-section legend {
+  color: var(--mh-muted);
+  font-size: 0.82rem;
+  font-weight: 900;
+  padding: 0 0.35rem;
+}
+
+.mh-radio-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.mh-account-summary,
+.mh-generated-password {
+  background: var(--mh-panel-soft);
+  border: 1px solid var(--mh-line);
+  border-radius: 8px;
+  display: grid;
+  gap: 0.35rem;
+  margin-bottom: 0.9rem;
+  padding: 0.8rem;
+}
+
+.mh-generated-password strong {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  overflow-wrap: anywhere;
+}
+
+.mh-detail-list {
+  display: grid;
+  gap: 0.65rem 1rem;
+  grid-template-columns: minmax(140px, 0.75fr) minmax(0, 1.25fr);
+}
+
+.mh-detail-list span,
+.mh-account-summary span,
+.mh-generated-password span {
+  color: var(--mh-muted);
+}
+
 .mh-modal header,
 .mh-modal-actions {
   align-items: center;

@@ -1,5 +1,5 @@
 import { hashPassword, requireMemberUser } from "@/lib/memberhub/auth";
-import { isCustomer, isStoreOwner, isSuperAdmin, normalizeRole, toLegacyRole } from "@/lib/memberhub/access";
+import { isCustomer, isStoreOwner, isSuperAdmin, normalizeRole } from "@/lib/memberhub/access";
 import { slugify } from "@/lib/memberhub/slug";
 import { createSupabaseServerClient } from "@/lib/supabaseServer";
 import crypto from "node:crypto";
@@ -362,7 +362,7 @@ function prepareUserPayload(body, payload, mode) {
   }
 
   if (nextPayload.role) {
-    nextPayload.role = toLegacyRole(nextPayload.role);
+    nextPayload.role = normalizeRole(nextPayload.role);
   }
 
   if (password) {
@@ -498,7 +498,7 @@ async function ensureCustomerUser(supabase, payload, body) {
   return {};
 }
 
-async function syncCustomerUser(supabase, customer, payload) {
+async function syncCustomerUser(supabase, customer, payload, body = {}) {
   if (!customer?.user_id) return {};
 
   const updatePayload = {};
@@ -509,6 +509,9 @@ async function syncCustomerUser(supabase, customer, payload) {
   }
   if (payload.phone !== undefined) updatePayload.phone = payload.phone;
   if (payload.status !== undefined) updatePayload.status = payload.status;
+  if (String(body.password || "").trim()) {
+    Object.assign(updatePayload, hashPassword(String(body.password || "").trim()));
+  }
 
   if (!Object.keys(updatePayload).length) return {};
 
@@ -592,7 +595,11 @@ async function writeResource(request, params, mode) {
     payload.subscription_status = payload.subscription_status || nextSubscriptionStatus(payload);
     payload.subscription_plan = payload.subscription_plan || "standard";
 
-    if (mode === "post" && !payload.owner_id && body.owner_email) {
+    if (mode === "post" && (!payload.subscription_start_date || (!payload.subscription_end_date && !body.subscription_months))) {
+      return NextResponse.json({ error: "Can nhap ngay bat dau va so thang thue" }, { status: 400 });
+    }
+
+    if (!payload.owner_id && body.owner_email) {
       const ownerEmail = String(body.owner_email || "").trim().toLowerCase();
       const { data: existingOwner, error: existingOwnerError } = await supabase
         .from("member_users")
@@ -617,8 +624,8 @@ async function writeResource(request, params, mode) {
             name: String(body.owner_name || payload.name || ownerEmail).trim(),
             email: ownerEmail,
             phone: String(body.owner_phone || payload.phone || "").trim() || null,
-            role: "owner",
-            status: "active",
+            role: "store_owner",
+            status: String(body.owner_status || "active").trim() || "active",
             ...hashPassword(ownerPassword)
           })
           .select("id")
@@ -715,13 +722,24 @@ async function writeResource(request, params, mode) {
       return NextResponse.json({ error: "Khong tim thay ho so khach hang" }, { status: 404 });
     }
 
-    const sync = await syncCustomerUser(supabase, customer, payload);
+    const sync = await syncCustomerUser(supabase, customer, payload, body);
     if (sync.error) {
       return NextResponse.json({ error: sync.error }, { status: sync.status });
     }
   }
 
   let previousTransaction = null;
+  let previousShop = null;
+  if (mode === "patch" && collection === "shops") {
+    const { data: shop } = await supabase
+      .from("shops")
+      .select("id,subscription_end_date,owner_id")
+      .eq("id", id)
+      .maybeSingle();
+
+    previousShop = shop;
+  }
+
   if (mode === "patch" && collection === "transactions") {
     const { data: previous } = await supabase
       .from(config.table)
@@ -766,7 +784,7 @@ async function writeResource(request, params, mode) {
   if (collection === "storeUsers") {
     await supabase
       .from("member_users")
-      .update({ role: "owner" })
+      .update({ role: "store_owner" })
       .eq("id", data.user_id);
 
     const { data: shop } = await supabase
@@ -786,7 +804,7 @@ async function writeResource(request, params, mode) {
   if (collection === "shops" && data.owner_id) {
     await supabase
       .from("member_users")
-      .update({ role: "owner" })
+      .update({ role: "store_owner" })
       .eq("id", data.owner_id);
 
     await supabase
@@ -796,6 +814,19 @@ async function writeResource(request, params, mode) {
         user_id: data.owner_id,
         role: "store_owner"
       }, { onConflict: "store_id,user_id" });
+  }
+
+  if (collection === "shops" && mode === "patch" && (body.subscription_months || body.subscription_renewal_note)) {
+    await supabase
+      .from("subscription_renewals")
+      .insert({
+        shop_id: data.id,
+        old_end_date: previousShop?.subscription_end_date || null,
+        new_end_date: data.subscription_end_date,
+        months: body.subscription_months ? Number(body.subscription_months) : null,
+        actor_id: auth.user.id,
+        note: String(body.subscription_renewal_note || "").trim() || null
+      });
   }
 
   if (collection === "transactions") {

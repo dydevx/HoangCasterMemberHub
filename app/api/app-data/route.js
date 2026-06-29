@@ -108,14 +108,7 @@ async function readStoreOwnerData(supabase, user) {
     readWhereIn(supabase, "shops", "id", shopIds),
     readOptionalWhereIn(supabase, "store_users", "store_id", shopIds)
   ]);
-  const userIds = [
-    user.id,
-    ...shops.map((shop) => shop.owner_id),
-    ...storeUsers.map((item) => item.user_id)
-  ];
-
-  const [users, customers, services, levels, cards, transactions, promotions, activityLogs, notifications, settings, languages] = await Promise.all([
-    readWhereIn(supabase, "member_users", "id", userIds, "id,name,email,role,status,phone,locale,created_at"),
+  const [customers, services, levels, cards, transactions, promotions, activityLogs, notifications, settings, languages] = await Promise.all([
     readWhereIn(supabase, "customers", "shop_id", shopIds),
     readWhereIn(supabase, "services", "shop_id", shopIds),
     readOptionalWhereIn(supabase, "membership_levels", "shop_id", shopIds),
@@ -127,6 +120,13 @@ async function readStoreOwnerData(supabase, user) {
     readOptionalWhereIn(supabase, "settings", "shop_id", shopIds),
     readOptional(supabase, "languages")
   ]);
+  const userIds = [
+    user.id,
+    ...shops.map((shop) => shop.owner_id),
+    ...storeUsers.map((item) => item.user_id),
+    ...customers.map((customer) => customer.user_id)
+  ];
+  const users = await readWhereIn(supabase, "member_users", "id", userIds, "id,name,email,role,status,phone,locale,created_at");
 
   return emptyRawData({
     shops,
@@ -245,12 +245,22 @@ function shapeData(data) {
       total_members: data.customers.filter((customer) => customer.shop_id === shop.id).length,
       remaining_days: shop.remaining_days ?? remainingDays(shop.subscription_end_date),
       subscription_status: computedSubscriptionStatus(shop),
-      owner_name: [
-        userMap.get(shop.owner_id)?.name,
-        ...(data.storeUsers || [])
-          .filter((item) => item.store_id === shop.id)
-          .map((item) => userMap.get(item.user_id)?.name)
-      ].filter(Boolean).join(", ")
+      owner_user_id: shop.owner_id,
+      owner_email: userMap.get(shop.owner_id)?.email || "",
+      owner_status: userMap.get(shop.owner_id)?.status || "",
+      employee_count: [...new Set((data.storeUsers || [])
+        .filter((item) => item.store_id === shop.id && item.user_id !== shop.owner_id)
+        .map((item) => item.user_id))]
+        .length,
+      owner_name: (() => {
+        const ownerName = userMap.get(shop.owner_id)?.name || "";
+        const staffCount = [...new Set((data.storeUsers || [])
+          .filter((item) => item.store_id === shop.id && item.user_id !== shop.owner_id)
+          .map((item) => item.user_id))]
+          .length;
+        if (!ownerName) return staffCount ? `+ ${staffCount} nhan vien` : "";
+        return staffCount ? `${ownerName} + ${staffCount} nhan vien` : ownerName;
+      })()
     })),
     storeUsers: (data.storeUsers || []).map((item) => ({
       ...item,

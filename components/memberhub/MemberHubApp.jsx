@@ -135,6 +135,45 @@ function subscriptionLabel(t, status) {
   }[status] || status || "-";
 }
 
+function todayInputDate() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function addMonthsForInput(dateValue, months) {
+  const date = new Date(dateValue || todayInputDate());
+  date.setMonth(date.getMonth() + Number(months || 1));
+  return date.toISOString().slice(0, 10);
+}
+
+function generatePassword() {
+  return `Mh@${Math.random().toString(36).slice(2, 8)}${Math.floor(1000 + Math.random() * 9000)}`;
+}
+
+function userName(user) {
+  return [user?.name, user?.email].filter(Boolean).join(" - ") || "-";
+}
+
+function currentOwner(shop, data = {}) {
+  return (data.users || []).find((item) => Number(item.id) === Number(shop?.owner_id));
+}
+
+function storeUserFor(shop, user, data = {}) {
+  return (data.storeUsers || []).find((item) => Number(item.store_id) === Number(shop?.id) && Number(item.user_id) === Number(user?.id));
+}
+
+function ownerCandidates(data = {}, currentShop = null) {
+  const assignedUserIds = new Set([
+    ...(data.storeUsers || []).map((item) => Number(item.user_id)),
+    ...(data.shops || []).map((shop) => Number(shop.owner_id)).filter(Boolean)
+  ]);
+  if (currentShop?.owner_id) assignedUserIds.delete(Number(currentShop.owner_id));
+
+  return (data.users || []).filter((item) => {
+    if (isSuperAdmin(item) || isCustomer(item)) return false;
+    return normalizeRole(item.role) === "store_owner" || !assignedUserIds.has(Number(item.id));
+  });
+}
+
 function withBasePath(path) {
   if (!appBasePath || !path.startsWith("/")) return path;
   if (path === appBasePath || path.startsWith(`${appBasePath}/`)) return path;
@@ -356,15 +395,17 @@ function MemberHubAppContent({ locale, setLocale }) {
   }
 
   async function addLocalRow(collection, row) {
-    await saveResource(collection, token, row, "POST");
+    const savedRow = await saveResource(collection, token, row, "POST");
     setData(await api("/api/app-data", token));
     setToast(t("toast.saved"));
+    return savedRow;
   }
 
   async function updateLocalRow(collection, row) {
-    await saveResource(collection, token, row, "PATCH");
+    const savedRow = await saveResource(collection, token, row, "PATCH");
     setData(await api("/api/app-data", token));
     setToast(t("toast.saved"));
+    return savedRow;
   }
 
   async function deleteLocalRow(collection, row) {
@@ -876,6 +917,7 @@ function ResourceTable({ addLocalRow, canWrite = false, data, deleteLocalRow, to
                 collection={collection}
                 columns={columns}
                 compact={compact}
+                data={data}
                 deleteLocalRow={deleteLocalRow}
                 key={row.id}
                 row={row}
@@ -901,7 +943,84 @@ function ResourceTable({ addLocalRow, canWrite = false, data, deleteLocalRow, to
         </div>
       ) : null}
 
-      {modalMode ? (
+      {modalMode === "detail" && view === "shops" ? (
+        <ShopDetailModal
+          data={data}
+          row={editingRow}
+          onClose={() => {
+            setEditingRow(null);
+            setModalMode("");
+          }}
+          t={t}
+        />
+      ) : null}
+
+      {modalMode === "account" && view === "shops" ? (
+        <ShopAccountModal
+          addLocalRow={addLocalRow}
+          data={data}
+          deleteLocalRow={deleteLocalRow}
+          row={editingRow}
+          onClose={() => {
+            setEditingRow(null);
+            setModalMode("");
+          }}
+          t={t}
+          updateLocalRow={updateLocalRow}
+        />
+      ) : null}
+
+      {modalMode === "renew" && view === "shops" ? (
+        <RenewShopModal
+          row={editingRow}
+          onClose={() => {
+            setEditingRow(null);
+            setModalMode("");
+          }}
+          onSave={async (row) => {
+            await updateLocalRow(collection, row);
+            setEditingRow(null);
+            setModalMode("");
+          }}
+          t={t}
+        />
+      ) : null}
+
+      {(modalMode === "add" || modalMode === "edit") && view === "shops" ? (
+        <ShopFormModal
+          data={data}
+          mode={modalMode}
+          row={editingRow}
+          onClose={() => {
+            setEditingRow(null);
+            setModalMode("");
+          }}
+          onSave={async (row) => {
+            if (modalMode === "edit") {
+              await updateLocalRow(collection, row);
+            } else {
+              await addLocalRow(collection, row);
+            }
+            setEditingRow(null);
+            setModalMode("");
+          }}
+          t={t}
+        />
+      ) : null}
+
+      {modalMode === "customerAccount" && view === "customers" ? (
+        <CustomerAccountModal
+          row={editingRow}
+          onClose={() => {
+            setEditingRow(null);
+            setModalMode("");
+          }}
+          t={t}
+          updateLocalRow={updateLocalRow}
+        />
+      ) : null}
+
+      {modalMode && !(view === "shops" && ["detail", "account", "renew", "add", "edit"].includes(modalMode)) && !(view === "customers" && modalMode === "customerAccount") ? (
         <ResourceModal
           fields={modalFields}
           mode={modalMode}
@@ -923,6 +1042,467 @@ function ResourceTable({ addLocalRow, canWrite = false, data, deleteLocalRow, to
           t={t}
         />
       ) : null}
+    </div>
+  );
+}
+
+function ShopFormModal({ data, mode, row, title, onClose, onSave, t }) {
+  const owners = ownerCandidates(data, row);
+  const [ownerMode, setOwnerMode] = useState(row?.owner_id ? "existing" : "new");
+  const [startDate, setStartDate] = useState(row?.subscription_start_date || todayInputDate());
+  const [months, setMonths] = useState("1");
+  const [endDate, setEndDate] = useState(row?.subscription_end_date || addMonthsForInput(row?.subscription_start_date || todayInputDate(), 1));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    setEndDate(addMonthsForInput(startDate, months));
+  }, [startDate, months]);
+
+  async function submit(event) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const password = String(form.get("owner_password") || "");
+    const confirmPassword = String(form.get("owner_password_confirm") || "");
+
+    if (ownerMode === "new" && password !== confirmPassword) {
+      setError(t("auth.passwordMismatch"));
+      return;
+    }
+
+    const payload = {
+      ...(row || {}),
+      name: form.get("name"),
+      logo_data_url: form.get("logo_data_url"),
+      address: form.get("address"),
+      email: form.get("email"),
+      phone: form.get("phone"),
+      slug: form.get("slug"),
+      status: form.get("status"),
+      subscription_plan: form.get("subscription_plan"),
+      subscription_start_date: startDate,
+      subscription_months: months,
+      subscription_end_date: endDate,
+      subscription_status: "active",
+      description: form.get("description")
+    };
+
+    if (ownerMode === "existing") {
+      payload.owner_id = form.get("owner_id");
+    } else {
+      payload.owner_id = "";
+      payload.owner_name = form.get("owner_name");
+      payload.owner_email = form.get("owner_email");
+      payload.owner_phone = form.get("owner_phone");
+      payload.owner_password = password;
+      payload.owner_status = form.get("owner_status");
+    }
+
+    try {
+      setSaving(true);
+      setError("");
+      await onSave(payload);
+    } catch (saveError) {
+      setError(saveError.message || "Khong the luu cua hang.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="mh-modal-backdrop" role="presentation">
+      <section className="mh-modal mh-wide-modal" role="dialog" aria-modal="true">
+        <header>
+          <h2>{title || (mode === "edit" ? t("shop.editShop") : t("shop.addShop"))}</h2>
+          <button type="button" onClick={onClose} title={t("common.cancel")}><X size={18} /></button>
+        </header>
+        <form className="mh-form" onSubmit={submit}>
+          <fieldset className="mh-form-section">
+            <legend>{t("shop.infoSection")}</legend>
+            <label>{t("shop.name")}<input name="name" defaultValue={row?.name || ""} required /></label>
+            <label>{t("shop.logo")}<input name="logo_data_url" defaultValue={row?.logo_data_url || ""} /></label>
+            <label>{t("shop.address")}<input name="address" defaultValue={row?.address || ""} /></label>
+            <label>{t("shop.email")}<input name="email" type="email" defaultValue={row?.email || ""} /></label>
+            <label>{t("shop.phone")}<input name="phone" defaultValue={row?.phone || ""} /></label>
+            <label>{t("shop.code")}<input name="slug" defaultValue={row?.slug || ""} /></label>
+            <label>{t("shop.systemStatus")}
+              <select name="status" defaultValue={row?.status || "active"}>
+                <option value="active">{t("common.active")}</option>
+                <option value="locked">{t("common.locked")}</option>
+              </select>
+            </label>
+            <label>{t("service.description")}<textarea name="description" defaultValue={row?.description || ""} rows={3} /></label>
+          </fieldset>
+
+          <fieldset className="mh-form-section">
+            <legend>{t("shop.ownerSection")}</legend>
+            <div className="mh-radio-grid">
+              <label className="mh-check">
+                <input checked={ownerMode === "existing"} name="owner_mode" type="radio" value="existing" onChange={() => setOwnerMode("existing")} />
+                {t("owner.useExisting")}
+              </label>
+              <label className="mh-check">
+                <input checked={ownerMode === "new"} name="owner_mode" type="radio" value="new" onChange={() => setOwnerMode("new")} />
+                {t("owner.createNew")}
+              </label>
+            </div>
+            {ownerMode === "existing" ? (
+              <label>{t("shop.owner")}
+                <select name="owner_id" defaultValue={row?.owner_id || ""} required>
+                  <option value="">-</option>
+                  {owners.map((owner) => <option key={owner.id} value={owner.id}>{userName(owner)}</option>)}
+                </select>
+              </label>
+            ) : (
+              <>
+                <label>{t("owner.name")}<input name="owner_name" required /></label>
+                <label>{t("owner.email")}<input name="owner_email" type="email" required /></label>
+                <label>{t("owner.phone")}<input name="owner_phone" /></label>
+                <label>{t("owner.tempPassword")}<input name="owner_password" type="password" minLength={8} required placeholder="Owner@123" /></label>
+                <label>{t("auth.confirmPassword")}<input name="owner_password_confirm" type="password" minLength={8} required /></label>
+                <label>{t("common.status")}
+                  <select name="owner_status" defaultValue="active">
+                    <option value="active">{t("common.active")}</option>
+                    <option value="locked">{t("common.locked")}</option>
+                  </select>
+                </label>
+              </>
+            )}
+          </fieldset>
+
+          <fieldset className="mh-form-section">
+            <legend>{t("subscription.section")}</legend>
+            <label>{t("subscription.plan")}
+              <select name="subscription_plan" defaultValue={row?.subscription_plan || "standard"}>
+                <option value="starter">Starter</option>
+                <option value="standard">Standard</option>
+                <option value="premium">Premium</option>
+              </select>
+            </label>
+            <label>{t("subscription.start")}<input name="subscription_start_date" type="date" value={startDate} required onChange={(event) => setStartDate(event.target.value)} /></label>
+            <label>{t("subscription.months")}
+              <select name="subscription_months" value={months} required onChange={(event) => setMonths(event.target.value)}>
+                <option value="1">1</option>
+                <option value="3">3</option>
+                <option value="6">6</option>
+                <option value="12">12</option>
+              </select>
+            </label>
+            <label>{t("subscription.end")}<input name="subscription_end_date" type="date" value={endDate} readOnly /></label>
+          </fieldset>
+          {error ? <div className="mh-alert">{error}</div> : null}
+          <div className="mh-modal-actions">
+            <button className="mh-tool-button" type="button" onClick={onClose} disabled={saving}>{t("common.cancel")}</button>
+            <button className="mh-primary slim" type="submit" disabled={saving}>{saving ? t("common.loading") : t("common.save")}</button>
+          </div>
+        </form>
+      </section>
+    </div>
+  );
+}
+
+function RenewShopModal({ row, onClose, onSave, t }) {
+  const [startDate, setStartDate] = useState(row?.subscription_start_date || todayInputDate());
+  const [months, setMonths] = useState("1");
+  const [endDate, setEndDate] = useState(addMonthsForInput(row?.subscription_start_date || todayInputDate(), 1));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    setEndDate(addMonthsForInput(startDate, months));
+  }, [startDate, months]);
+
+  async function submit(event) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    try {
+      setSaving(true);
+      setError("");
+      await onSave({
+        ...row,
+        subscription_plan: form.get("subscription_plan"),
+        subscription_start_date: startDate,
+        subscription_months: months,
+        subscription_end_date: endDate,
+        subscription_status: "active",
+        subscription_renewal_note: form.get("subscription_renewal_note")
+      });
+    } catch (saveError) {
+      setError(saveError.message || "Khong the gia han.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="mh-modal-backdrop" role="presentation">
+      <section className="mh-modal" role="dialog" aria-modal="true">
+        <header>
+          <h2>{t("subscription.renew")}</h2>
+          <button type="button" onClick={onClose} title={t("common.cancel")}><X size={18} /></button>
+        </header>
+        <form className="mh-form" onSubmit={submit}>
+          <label>{t("subscription.plan")}
+            <select name="subscription_plan" defaultValue={row?.subscription_plan || "standard"}>
+              <option value="starter">Starter</option>
+              <option value="standard">Standard</option>
+              <option value="premium">Premium</option>
+            </select>
+          </label>
+          <label>{t("subscription.start")}<input type="date" value={startDate} required onChange={(event) => setStartDate(event.target.value)} /></label>
+          <label>{t("subscription.months")}
+            <select value={months} onChange={(event) => setMonths(event.target.value)}>
+              <option value="1">1</option>
+              <option value="3">3</option>
+              <option value="6">6</option>
+              <option value="12">12</option>
+            </select>
+          </label>
+          <label>{t("subscription.end")}<input type="date" value={endDate} readOnly /></label>
+          <label>{t("transaction.note")}<textarea name="subscription_renewal_note" rows={3} /></label>
+          {error ? <div className="mh-alert">{error}</div> : null}
+          <div className="mh-modal-actions">
+            <button className="mh-tool-button" type="button" onClick={onClose} disabled={saving}>{t("common.cancel")}</button>
+            <button className="mh-primary slim" type="submit" disabled={saving}>{saving ? t("common.loading") : t("common.save")}</button>
+          </div>
+        </form>
+      </section>
+    </div>
+  );
+}
+
+function ShopDetailModal({ data, row, onClose, t }) {
+  const owner = currentOwner(row, data);
+  const employees = Math.max(0, Number(row?.employee_count || 0));
+
+  return (
+    <div className="mh-modal-backdrop" role="presentation">
+      <section className="mh-modal" role="dialog" aria-modal="true">
+        <header>
+          <h2>{t("shop.viewDetails")}</h2>
+          <button type="button" onClick={onClose} title={t("common.cancel")}><X size={18} /></button>
+        </header>
+        <div className="mh-detail-list">
+          <span>{t("shop.name")}</span><strong>{row?.name || "-"}</strong>
+          <span>{t("shop.owner")}</span><strong>{owner?.name || "-"}</strong>
+          <span>{t("owner.email")}</span><strong>{owner?.email || "-"}</strong>
+          <span>{t("dashboard.customers")}</span><strong>{row?.total_members ?? 0}</strong>
+          <span>{t("subscription.plan")}</span><strong>{row?.subscription_plan || "-"}</strong>
+          <span>{t("subscription.start")}</span><strong>{dateText(row?.subscription_start_date)}</strong>
+          <span>{t("subscription.end")}</span><strong>{dateText(row?.subscription_end_date)}</strong>
+          <span>{t("subscription.remaining")}</span><strong>{row?.remaining_days === null || row?.remaining_days === undefined ? "-" : `${row.remaining_days} ${t("common.days")}`}</strong>
+          <span>{t("account.staffCount")}</span><strong>{employees}</strong>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function ShopAccountModal({ addLocalRow, data, deleteLocalRow, row, onClose, t, updateLocalRow }) {
+  const owner = currentOwner(row, data);
+  const owners = ownerCandidates(data, row);
+  const [ownerMode, setOwnerMode] = useState("existing");
+  const [password, setPassword] = useState("");
+  const [generatedPassword, setGeneratedPassword] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  async function run(action) {
+    try {
+      setSaving(true);
+      setError("");
+      await action();
+    } catch (actionError) {
+      setError(actionError.message || "Khong the cap nhat tai khoan.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function resetPassword(event) {
+    event.preventDefault();
+    if (!owner?.id) {
+      setError(t("account.noOwner"));
+      return;
+    }
+    const nextPassword = password || generatePassword();
+    await run(async () => {
+      await updateLocalRow("users", { id: owner.id, password: nextPassword });
+      setGeneratedPassword(nextPassword);
+      setPassword("");
+    });
+  }
+
+  async function changeOwner(event) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    await run(async () => {
+      if (ownerMode === "existing") {
+        await updateLocalRow("shops", { ...row, owner_id: form.get("owner_id") });
+        return;
+      }
+
+      const passwordValue = String(form.get("owner_password") || "");
+      if (passwordValue !== String(form.get("owner_password_confirm") || "")) {
+        throw new Error(t("auth.passwordMismatch"));
+      }
+
+      const newOwner = await addLocalRow("users", {
+        name: form.get("owner_name"),
+        email: form.get("owner_email"),
+        phone: form.get("owner_phone"),
+        password: passwordValue,
+        role: "store_owner",
+        status: form.get("owner_status")
+      });
+      await updateLocalRow("shops", { ...row, owner_id: newOwner.id });
+    });
+  }
+
+  async function removeOwner() {
+    if (!owner?.id || !window.confirm(t("account.removeOwnerConfirm"))) return;
+    await run(async () => {
+      const relation = storeUserFor(row, owner, data);
+      await updateLocalRow("shops", { ...row, owner_id: "" });
+      if (relation?.id && deleteLocalRow) {
+        await deleteLocalRow("storeUsers", relation);
+      }
+    });
+  }
+
+  async function toggleOwnerLock() {
+    if (!owner?.id) return;
+    await run(async () => {
+      await updateLocalRow("users", { id: owner.id, status: owner.status === "locked" ? "active" : "locked" });
+    });
+  }
+
+  return (
+    <div className="mh-modal-backdrop" role="presentation">
+      <section className="mh-modal mh-wide-modal" role="dialog" aria-modal="true">
+        <header>
+          <h2>{t("account.manage")}</h2>
+          <button type="button" onClick={onClose} title={t("common.cancel")}><X size={18} /></button>
+        </header>
+        <div className="mh-account-summary">
+          <strong>{owner?.name || t("account.noOwner")}</strong>
+          <span>{owner?.email || "-"}</span>
+          {owner?.status ? <StatusBadge t={t} value={owner.status} /> : null}
+        </div>
+
+        <form className="mh-form" onSubmit={resetPassword}>
+          <fieldset className="mh-form-section">
+            <legend>{t("account.resetPassword")}</legend>
+            <label>{t("auth.newPassword")}<input value={password} minLength={8} type="password" onChange={(event) => setPassword(event.target.value)} placeholder={t("account.randomIfBlank")} /></label>
+            <div className="mh-modal-actions">
+              <button className="mh-tool-button" type="button" disabled={saving || !owner} onClick={() => setPassword(generatePassword())}>{t("account.generatePassword")}</button>
+              <button className="mh-primary slim" type="submit" disabled={saving || !owner}>{t("account.resetPassword")}</button>
+            </div>
+            {generatedPassword ? <div className="mh-generated-password"><span>{t("account.newPassword")}</span><strong>{generatedPassword}</strong></div> : null}
+          </fieldset>
+        </form>
+
+        <form className="mh-form" onSubmit={changeOwner}>
+          <fieldset className="mh-form-section">
+            <legend>{t("account.changeOwner")}</legend>
+            <div className="mh-radio-grid">
+              <label className="mh-check"><input checked={ownerMode === "existing"} name="account_owner_mode" type="radio" onChange={() => setOwnerMode("existing")} />{t("owner.useExisting")}</label>
+              <label className="mh-check"><input checked={ownerMode === "new"} name="account_owner_mode" type="radio" onChange={() => setOwnerMode("new")} />{t("owner.createNew")}</label>
+            </div>
+            {ownerMode === "existing" ? (
+              <label>{t("shop.owner")}
+                <select name="owner_id" defaultValue={row?.owner_id || ""} required>
+                  <option value="">-</option>
+                  {owners.map((candidate) => <option key={candidate.id} value={candidate.id}>{userName(candidate)}</option>)}
+                </select>
+              </label>
+            ) : (
+              <>
+                <label>{t("owner.name")}<input name="owner_name" required /></label>
+                <label>{t("owner.email")}<input name="owner_email" type="email" required /></label>
+                <label>{t("owner.phone")}<input name="owner_phone" /></label>
+                <label>{t("owner.tempPassword")}<input name="owner_password" type="password" minLength={8} required /></label>
+                <label>{t("auth.confirmPassword")}<input name="owner_password_confirm" type="password" minLength={8} required /></label>
+                <label>{t("common.status")}<select name="owner_status" defaultValue="active"><option value="active">{t("common.active")}</option><option value="locked">{t("common.locked")}</option></select></label>
+              </>
+            )}
+            <div className="mh-modal-actions">
+              <button className="mh-primary slim" type="submit" disabled={saving}>{t("account.changeOwner")}</button>
+            </div>
+          </fieldset>
+        </form>
+
+        {error ? <div className="mh-alert">{error}</div> : null}
+        <div className="mh-modal-actions">
+          <button className="mh-tool-button" type="button" onClick={toggleOwnerLock} disabled={saving || !owner}>{owner?.status === "locked" ? t("common.unlock") : t("common.lock")}</button>
+          <button className="mh-tool-button" type="button" onClick={removeOwner} disabled={saving || !owner}>{t("account.removeOwner")}</button>
+          <button className="mh-primary slim" type="button" onClick={onClose}>{t("common.save")}</button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function CustomerAccountModal({ row, onClose, t, updateLocalRow }) {
+  const [password, setPassword] = useState("");
+  const [generatedPassword, setGeneratedPassword] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  async function run(action) {
+    try {
+      setSaving(true);
+      setError("");
+      await action();
+    } catch (actionError) {
+      setError(actionError.message || "Khong the cap nhat tai khoan khach hang.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function resetPassword(event) {
+    event.preventDefault();
+    const nextPassword = password || generatePassword();
+    await run(async () => {
+      await updateLocalRow("customers", { id: row.id, password: nextPassword });
+      setGeneratedPassword(nextPassword);
+      setPassword("");
+    });
+  }
+
+  async function toggleCustomerLock() {
+    await run(async () => {
+      await updateLocalRow("customers", { id: row.id, status: row.status === "locked" ? "active" : "locked" });
+    });
+  }
+
+  return (
+    <div className="mh-modal-backdrop" role="presentation">
+      <section className="mh-modal" role="dialog" aria-modal="true">
+        <header>
+          <h2>{t("account.customerAccount")}</h2>
+          <button type="button" onClick={onClose} title={t("common.cancel")}><X size={18} /></button>
+        </header>
+        <div className="mh-account-summary">
+          <strong>{row?.name || "-"}</strong>
+          <span>{row?.email || "-"}</span>
+          <StatusBadge t={t} value={row?.status} />
+        </div>
+        <form className="mh-form" onSubmit={resetPassword}>
+          <label>{t("auth.newPassword")}<input value={password} minLength={8} type="password" onChange={(event) => setPassword(event.target.value)} placeholder={t("account.randomIfBlank")} /></label>
+          <div className="mh-modal-actions">
+            <button className="mh-tool-button" type="button" disabled={saving} onClick={() => setPassword(generatePassword())}>{t("account.generatePassword")}</button>
+            <button className="mh-primary slim" type="submit" disabled={saving}>{t("account.resetPassword")}</button>
+          </div>
+          {generatedPassword ? <div className="mh-generated-password"><span>{t("account.newPassword")}</span><strong>{generatedPassword}</strong></div> : null}
+        </form>
+        {error ? <div className="mh-alert">{error}</div> : null}
+        <div className="mh-modal-actions">
+          <button className="mh-tool-button" type="button" onClick={toggleCustomerLock} disabled={saving}>{row?.status === "locked" ? t("common.unlock") : t("common.lock")}</button>
+          <button className="mh-primary slim" type="button" onClick={onClose}>{t("common.save")}</button>
+        </div>
+      </section>
     </div>
   );
 }
@@ -978,8 +1558,10 @@ function ResourceModal({ fields, mode, row, title, onClose, onSave, t }) {
   );
 }
 
-function TableRow({ canWrite, collection, columns, compact, deleteLocalRow, row, setEditingRow, setModalMode, t, toggleLockRow }) {
+function TableRow({ canWrite, collection, columns, compact, data, deleteLocalRow, row, setEditingRow, setModalMode, t, toggleLockRow }) {
   const protectedAdmin = collection === "users" && isSuperAdmin(row);
+  const isShopRow = collection === "shops";
+  const isCustomerRow = collection === "customers";
 
   return (
     <tr>
@@ -989,10 +1571,23 @@ function TableRow({ canWrite, collection, columns, compact, deleteLocalRow, row,
       {!compact && canWrite ? (
         <td>
           <div className="mh-action-group">
+            {isShopRow ? (
+              <button
+                className="mh-icon-action"
+                type="button"
+                title={t("shop.viewDetails")}
+                onClick={() => {
+                  setEditingRow(row);
+                  setModalMode("detail");
+                }}
+              >
+                <FileText size={16} />
+              </button>
+            ) : null}
             <button
               className="mh-icon-action"
               type="button"
-              title={protectedAdmin ? t("auth.changePassword") : t("common.edit")}
+              title={protectedAdmin ? t("auth.changePassword") : isShopRow ? t("shop.editShop") : t("common.edit")}
               onClick={() => {
                 setEditingRow(row);
                 setModalMode("edit");
@@ -1000,6 +1595,56 @@ function TableRow({ canWrite, collection, columns, compact, deleteLocalRow, row,
             >
               {protectedAdmin ? <Lock size={16} /> : <Settings size={16} />}
             </button>
+            {isShopRow ? (
+              <>
+                <button
+                  className="mh-icon-action"
+                  type="button"
+                  title={t("subscription.renew")}
+                  onClick={() => {
+                    setEditingRow(row);
+                    setModalMode("renew");
+                  }}
+                >
+                  <CreditCard size={16} />
+                </button>
+                <button
+                  className="mh-icon-action"
+                  type="button"
+                  title={t("account.manage")}
+                  onClick={() => {
+                    setEditingRow(row);
+                    setModalMode("account");
+                  }}
+                >
+                  <UserRound size={16} />
+                </button>
+                <button
+                  className="mh-icon-action"
+                  type="button"
+                  title={t("shop.exportMembers")}
+                  onClick={() => {
+                    const members = (data.customers || []).filter((customer) => Number(customer.shop_id) === Number(row.id));
+                    exportCsv(`${row.slug || row.name || "shop"}-members.csv`, members, getColumns("customers", t, data));
+                  }}
+                >
+                  <Download size={16} />
+                </button>
+              </>
+            ) : null}
+            {isCustomerRow ? (
+              <button
+                className="mh-icon-action"
+                type="button"
+                title={t("account.manage")}
+                onClick={() => {
+                  setEditingRow(row);
+                  setModalMode("customerAccount");
+                }}
+              >
+                <LockKeyhole size={16} />
+              </button>
+            ) : null}
             {!protectedAdmin && row.status && toggleLockRow ? (
               <button
                 className="mh-icon-action"
