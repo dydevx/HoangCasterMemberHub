@@ -105,7 +105,15 @@ function money(value) {
 
 function dateText(value) {
   if (!value) return "-";
-  return new Intl.DateTimeFormat("vi-VN", { dateStyle: "medium" }).format(new Date(value));
+  const raw = String(value);
+  const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (match) {
+    return `${Number(match[3])}/${Number(match[2])}/${match[1]}`;
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return `${date.getDate()}/${date.getMonth() + 1}/${date.getFullYear()}`;
 }
 
 function daysUntil(value) {
@@ -159,6 +167,12 @@ function statusLabel(t, value) {
 function displayAccountName(user, t) {
   if (isSuperAdmin(user)) return t("app.admin");
   return user?.name || "-";
+}
+
+function remainingText(t, value) {
+  if (value === null || value === undefined) return "-";
+  if (Number(value) <= 0) return t("common.expired");
+  return `${value} ${t("common.days")}`;
 }
 
 function todayInputDate() {
@@ -1320,7 +1334,7 @@ function ShopDetailModal({ data, row, onClose, t }) {
           <span>{t("subscription.plan")}</span><strong>{planLabel(t, row?.subscription_plan)}</strong>
           <span>{t("subscription.start")}</span><strong>{dateText(row?.subscription_start_date)}</strong>
           <span>{t("subscription.end")}</span><strong>{dateText(row?.subscription_end_date)}</strong>
-          <span>{t("subscription.remaining")}</span><strong>{row?.remaining_days === null || row?.remaining_days === undefined ? "-" : `${row.remaining_days} ${t("common.days")}`}</strong>
+          <span>{t("subscription.remaining")}</span><strong>{remainingText(t, row?.remaining_days)}</strong>
           <span>{t("account.staffCount")}</span><strong>{employees}</strong>
         </div>
       </section>
@@ -1763,7 +1777,7 @@ function CustomerCards({ cards, t }) {
             <div>
               <strong>{Number(card.points || 0).toLocaleString("vi-VN")} {t("common.points")}</strong>
               <p>{t("card.spend")}: {money(card.total_spend)}</p>
-              <p>{t("card.expires")}: {card.expires_at || "-"}</p>
+              <p>{t("card.expires")}: {dateText(card.expires_at)}</p>
             </div>
           </div>
         </article>
@@ -1903,7 +1917,7 @@ function Profile({ customers, t, updateLocalRow, user }) {
       <div className="mh-profile-extra">
         <span>{t("customer.phone")}: {user.phone || "-"}</span>
         <span>{t("shop.name")}: {customer?.shop_name || "-"}</span>
-        <span>{t("customer.birthday")}: {customer?.birthday || "-"}</span>
+        <span>{t("customer.birthday")}: {dateText(customer?.birthday)}</span>
         <span>{t("shop.address")}: {customer?.address || "-"}</span>
       </div>
       {customer ? (
@@ -2112,7 +2126,7 @@ function getColumns(view, t, data = {}) {
       { key: "subscription_end_date", label: t("subscription.end"), render: (row) => dateText(row.subscription_end_date) },
       { key: "remaining_days", label: t("subscription.remaining"), render: (row) => {
         const remaining = row.remaining_days ?? daysUntil(row.subscription_end_date);
-        return remaining === null || remaining === undefined ? "-" : `${remaining} ${t("common.days")}`;
+        return <span className="mh-remaining-badge">{remainingText(t, remaining)}</span>;
       } },
       { key: "total_members", label: t("dashboard.customers") },
       { key: "subscription_status", label: t("common.status"), render: (row) => <StatusBadge t={t} value={subscriptionStatus(row)} /> }

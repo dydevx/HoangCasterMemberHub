@@ -9,6 +9,19 @@ function money(value) {
   }).format(Number(value || 0));
 }
 
+function dateText(value) {
+  if (!value) return "-";
+  const raw = String(value);
+  const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (match) {
+    return `${Number(match[3])}/${Number(match[2])}/${match[1]}`;
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return `${date.getDate()}/${date.getMonth() + 1}/${date.getFullYear()}`;
+}
+
 function maskPhone(value) {
   const digits = String(value || "").replace(/\D/g, "");
   if (digits.length < 7) return "";
@@ -79,15 +92,15 @@ export default async function PublicMemberPage({ params }) {
         <div className="mh-public-number">{data.card.card_number}</div>
         <div className="mh-public-stats">
           <article>
-            <span>Diem hien tai</span>
+            <span>Điểm hiện tại</span>
             <strong>{Number(data.card.points || 0).toLocaleString("vi-VN")}</strong>
           </article>
           <article>
-            <span>Hang hien tai</span>
+            <span>Hạng hiện tại</span>
             <strong>{data.card.tier}</strong>
           </article>
           <article>
-            <span>Tong chi tieu</span>
+            <span>Tổng chi tiêu</span>
             <strong>{money(data.card.total_spend)}</strong>
           </article>
         </div>
@@ -96,11 +109,11 @@ export default async function PublicMemberPage({ params }) {
         </div>
         <p>
           {target
-            ? `Con ${Math.max(0, Number(target.min_points || 0) - Number(data.card.points || 0)).toLocaleString("vi-VN")} diem de len hang ${target.name}.`
-            : "Ban dang o hang cao nhat hien co."}
+            ? `Còn ${Math.max(0, Number(target.min_points || 0) - Number(data.card.points || 0)).toLocaleString("vi-VN")} điểm để lên hạng ${target.name}.`
+            : "Bạn đang ở hạng cao nhất hiện có."}
         </p>
         {currentBenefits ? <div className="mh-public-benefits">{currentBenefits}</div> : null}
-        <small>Cap nhat gan nhat: {new Intl.DateTimeFormat("vi-VN", { dateStyle: "medium" }).format(new Date(data.card.updated_at || data.card.created_at))}</small>
+        <small>Cập nhật gần nhất: {dateText(data.card.updated_at || data.card.created_at)}</small>
       </section>
     </main>
   );

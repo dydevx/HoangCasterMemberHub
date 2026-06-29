@@ -1654,6 +1654,17 @@ code {
   white-space: nowrap;
 }
 
+.mh-remaining-badge {
+  background: color-mix(in srgb, var(--mh-accent) 10%, var(--mh-panel));
+  border: 1px solid color-mix(in srgb, var(--mh-accent) 22%, var(--mh-line));
+  border-radius: 8px;
+  color: var(--mh-brand-dark);
+  display: inline-flex;
+  font-weight: 850;
+  padding: 0.22rem 0.52rem;
+  white-space: nowrap;
+}
+
 .mh-status.inactive,
 .mh-status.locked {
   background: rgba(194, 65, 91, 0.11);
