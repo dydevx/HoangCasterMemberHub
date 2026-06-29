@@ -3,6 +3,8 @@
 
 create extension if not exists pgcrypto;
 
+alter table public.member_users add column if not exists avatar_url text;
+
 alter table public.shops add column if not exists subscription_start_date date;
 alter table public.shops add column if not exists subscription_end_date date;
 alter table public.shops add column if not exists subscription_status text not null default 'active';

@@ -161,6 +161,12 @@ const en = {
   "customer.gender": "Gender",
   "customer.notes": "Notes",
   "customer.avatar": "Avatar",
+  "avatar.change": "Change avatar",
+  "avatar.upload": "Choose image",
+  "avatar.remove": "Remove photo",
+  "avatar.help": "PNG or JPG, under 900KB.",
+  "avatar.invalid": "Please choose a valid image file.",
+  "avatar.failed": "Unable to update avatar.",
   "shop.name": "Shop",
   "shop.owner": "Owner",
   "shop.address": "Address",
@@ -230,6 +236,7 @@ const en = {
   "settings.deploy": "Deployment",
   "toast.saved": "Changes saved.",
   "toast.passwordChanged": "Password changed.",
+  "toast.avatarChanged": "Avatar updated.",
   "toast.deleted": "Record deleted.",
   "error.noSupabase": "Supabase is not configured. The app is running with local demo data."
 };
@@ -349,6 +356,12 @@ const vi = {
   "customer.gender": "Giới tính",
   "customer.notes": "Ghi chú",
   "customer.avatar": "Avatar",
+  "avatar.change": "Đổi ảnh đại diện",
+  "avatar.upload": "Chọn ảnh",
+  "avatar.remove": "Xóa ảnh",
+  "avatar.help": "Ảnh PNG hoặc JPG, dưới 900KB.",
+  "avatar.invalid": "Vui lòng chọn đúng tệp hình ảnh.",
+  "avatar.failed": "Không thể cập nhật ảnh đại diện.",
   "shop.name": "Cửa hàng",
   "shop.owner": "Chủ sở hữu",
   "shop.address": "Địa chỉ",
@@ -421,6 +434,7 @@ const vi = {
   "settings.deploy": "Triển khai",
   "toast.saved": "Đã lưu thay đổi.",
   "toast.passwordChanged": "Đã đổi mật khẩu.",
+  "toast.avatarChanged": "Đã cập nhật ảnh đại diện.",
   "toast.deleted": "Đã xóa bản ghi.",
   "error.noSupabase": "Chưa cấu hình Supabase. Ứng dụng đang chạy bằng dữ liệu demo."
 };

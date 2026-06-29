@@ -21,6 +21,7 @@ create table if not exists public.member_users (
   role text not null check (role in ('admin', 'owner', 'customer')),
   status text not null default 'active' check (status in ('active', 'locked')),
   phone text,
+  avatar_url text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -563,6 +564,7 @@ where public.customers.id = deduped.id
 
 -- SaaS extensions for the production-style MemberHub dashboard.
 alter table public.member_users add column if not exists locale text default 'vi';
+alter table public.member_users add column if not exists avatar_url text;
 alter table public.shops add column if not exists subscription_start_date date;
 alter table public.shops add column if not exists subscription_end_date date;
 alter table public.shops add column if not exists subscription_status text not null default 'active';

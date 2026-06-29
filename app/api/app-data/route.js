@@ -4,6 +4,14 @@ import { routePathFor, routeSlug } from "@/lib/memberhub/slug";
 import { createSupabaseServerClient } from "@/lib/supabaseServer";
 import { NextResponse } from "next/server";
 
+const memberUserSelect = "id,name,email,role,status,phone,locale,avatar_url,created_at";
+const memberUserFallbackSelect = "id,name,email,role,status,phone,locale,created_at";
+
+function missingColumn(error, column) {
+  const message = error?.message || "";
+  return message.includes(`'${column}' column`) || message.includes(`column ${column}`) || message.includes(`.${column}`);
+}
+
 async function readAll(supabase, table, select = "*") {
   const { data, error } = await supabase.from(table).select(select);
   if (error) throw error;
@@ -45,6 +53,29 @@ async function readWhereIn(supabase, table, column, values, select = "*") {
   const { data, error } = await supabase.from(table).select(select).in(column, list);
   if (error) throw error;
   return data || [];
+}
+
+async function readAllMemberUsers(supabase) {
+  const result = await supabase.from("member_users").select(memberUserSelect);
+  if (missingColumn(result.error, "avatar_url")) {
+    return readAll(supabase, "member_users", memberUserFallbackSelect);
+  }
+
+  if (result.error) throw result.error;
+  return result.data || [];
+}
+
+async function readMemberUsersWhereIn(supabase, column, values) {
+  const list = [...new Set((values || []).filter((value) => value !== null && value !== undefined))];
+  if (!list.length) return [];
+
+  const result = await supabase.from("member_users").select(memberUserSelect).in(column, list);
+  if (missingColumn(result.error, "avatar_url")) {
+    return readWhereIn(supabase, "member_users", column, list, memberUserFallbackSelect);
+  }
+
+  if (result.error) throw result.error;
+  return result.data || [];
 }
 
 async function readOptionalWhereIn(supabase, table, column, values, select = "*") {
@@ -126,7 +157,7 @@ async function readStoreOwnerData(supabase, user) {
     ...storeUsers.map((item) => item.user_id),
     ...customers.map((customer) => customer.user_id)
   ];
-  const users = await readWhereIn(supabase, "member_users", "id", userIds, "id,name,email,role,status,phone,locale,created_at");
+  const users = await readMemberUsersWhereIn(supabase, "id", userIds);
 
   return emptyRawData({
     shops,
@@ -328,7 +359,7 @@ export async function GET(request) {
     const [shops, storeUsers, users, customers, services, levels, cards, transactions, promotions, activityLogs, notifications, settings, languages] = await Promise.all([
       readAll(supabase, "shops"),
       readOptional(supabase, "store_users"),
-      readAll(supabase, "member_users", "id,name,email,role,status,phone,locale,created_at"),
+      readAllMemberUsers(supabase),
       readAll(supabase, "customers"),
       readAll(supabase, "services"),
       readOptional(supabase, "membership_levels"),

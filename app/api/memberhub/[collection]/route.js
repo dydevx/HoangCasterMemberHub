@@ -49,7 +49,7 @@ const resources = {
   },
   users: {
     table: "member_users",
-    fields: ["name", "email", "role", "status", "phone"],
+    fields: ["name", "email", "role", "status", "phone", "avatar_url"],
     adminOnlyCreate: true
   },
   notifications: {
@@ -509,6 +509,7 @@ async function syncCustomerUser(supabase, customer, payload, body = {}) {
   }
   if (payload.phone !== undefined) updatePayload.phone = payload.phone;
   if (payload.status !== undefined) updatePayload.status = payload.status;
+  if (payload.avatar_url !== undefined) updatePayload.avatar_url = payload.avatar_url;
   if (String(body.password || "").trim()) {
     Object.assign(updatePayload, hashPassword(String(body.password || "").trim()));
   }
@@ -522,6 +523,22 @@ async function syncCustomerUser(supabase, customer, payload, body = {}) {
     .eq("role", "customer");
 
   if (error) {
+    const missingColumn = error.message?.match(/Could not find the '([^']+)' column/);
+    if (missingColumn?.[1] === "avatar_url") {
+      const retryPayload = { ...updatePayload };
+      delete retryPayload.avatar_url;
+      if (!Object.keys(retryPayload).length) return {};
+
+      const retry = await supabase
+        .from("member_users")
+        .update(retryPayload)
+        .eq("id", customer.user_id)
+        .eq("role", "customer");
+
+      if (!retry.error) return {};
+      return { error: retry.error.message, status: 400 };
+    }
+
     return { error: error.message, status: 400 };
   }
 

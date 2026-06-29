@@ -1187,15 +1187,6 @@ code {
   gap: 0.7rem;
 }
 
-.mh-boot-state {
-  align-items: center;
-  color: var(--mh-muted);
-  display: flex;
-  font-weight: 800;
-  gap: 0.6rem;
-  padding-top: 0.5rem;
-}
-
 .mh-role-tabs {
   background: var(--mh-panel-soft);
   border: 1px solid var(--mh-line);
@@ -1924,6 +1915,97 @@ code {
   justify-content: center;
   margin-bottom: 0.8rem;
   width: 4.2rem;
+}
+
+.mh-avatar.has-image {
+  background: var(--mh-panel-soft);
+  border: 1px solid var(--mh-line);
+  overflow: hidden;
+}
+
+.mh-avatar img {
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
+.mh-avatar.large {
+  height: 5.5rem;
+  width: 5.5rem;
+}
+
+.mh-user-chip {
+  max-width: 220px;
+}
+
+.mh-user-chip .mh-avatar {
+  flex: 0 0 auto;
+  font-size: 0.92rem;
+  height: 2rem;
+  margin: 0;
+  width: 2rem;
+}
+
+.mh-user-chip span:not(.mh-avatar) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mh-profile .mh-tool-button {
+  margin-bottom: 0.65rem;
+}
+
+.mh-avatar-form {
+  margin-top: 0;
+}
+
+.mh-avatar-preview {
+  align-items: center;
+  background: var(--mh-panel-soft);
+  border: 1px solid var(--mh-line);
+  border-radius: 8px;
+  display: flex;
+  gap: 1rem;
+  padding: 0.9rem;
+}
+
+.mh-avatar-preview .mh-avatar {
+  margin: 0;
+}
+
+.mh-avatar-preview div {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.mh-avatar-preview span {
+  color: var(--mh-muted);
+  overflow-wrap: anywhere;
+}
+
+.mh-avatar-upload {
+  align-items: center;
+  background: var(--mh-panel-soft);
+  border: 1px dashed color-mix(in srgb, var(--mh-brand) 46%, var(--mh-line));
+  border-radius: 8px;
+  cursor: pointer;
+  display: grid;
+  gap: 0.25rem;
+  justify-items: center;
+  min-height: 8rem;
+  padding: 1rem;
+  text-align: center;
+}
+
+.mh-avatar-upload input {
+  display: none;
+}
+
+.mh-avatar-upload small {
+  color: var(--mh-muted);
+  font-weight: 700;
 }
 
 .mh-modal-backdrop {

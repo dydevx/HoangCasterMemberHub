@@ -4,6 +4,7 @@ import {
   BadgePercent,
   Bell,
   Building2,
+  Camera,
   Check,
   ChevronLeft,
   ChevronRight,
@@ -95,6 +96,8 @@ const roleKeys = {
   customer: "app.customer"
 };
 
+const avatarMaxBytes = 900 * 1024;
+
 function money(value) {
   return new Intl.NumberFormat("vi-VN", {
     style: "currency",
@@ -167,6 +170,15 @@ function statusLabel(t, value) {
 function displayAccountName(user, t) {
   if (isSuperAdmin(user)) return t("app.admin");
   return user?.name || "-";
+}
+
+function avatarUrlFor(user, fallback = null) {
+  return user?.avatar_url || user?.avatarUrl || fallback?.avatar_url || fallback?.avatarUrl || "";
+}
+
+function initialFor(user, fallback = "M") {
+  const text = user?.name || user?.email || fallback;
+  return String(text).trim().charAt(0).toUpperCase() || fallback;
 }
 
 function remainingText(t, value) {
@@ -279,6 +291,30 @@ async function saveResource(collection, token, row, method) {
   return payload.row || row;
 }
 
+function readAvatarFile(file) {
+  return new Promise((resolve, reject) => {
+    if (!file) {
+      resolve("");
+      return;
+    }
+
+    if (!file.type?.startsWith("image/")) {
+      reject(new Error("Vui lòng chọn đúng tệp hình ảnh."));
+      return;
+    }
+
+    if (file.size > avatarMaxBytes) {
+      reject(new Error("Ảnh đại diện nên nhỏ hơn 900KB."));
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("Không thể đọc tệp ảnh."));
+    reader.readAsDataURL(file);
+  });
+}
+
 function readStored(key, fallback) {
   if (typeof window === "undefined") return fallback;
   return localStorage.getItem(key) || fallback;
@@ -332,6 +368,7 @@ function MemberHubAppContent({ locale, setLocale }) {
   const [booting, setBooting] = useState(true);
   const [loading, setLoading] = useState(false);
   const [passwordModalOpen, setPasswordModalOpen] = useState(false);
+  const [avatarModalOpen, setAvatarModalOpen] = useState(false);
   const [theme, setTheme] = useState("light");
   const [toast, setToast] = useState("");
 
@@ -454,6 +491,18 @@ function MemberHubAppContent({ locale, setLocale }) {
     setPasswordModalOpen(false);
   }
 
+  async function changeAvatar(avatarUrl) {
+    const payload = await api("/api/me", token, {
+      method: "PATCH",
+      body: JSON.stringify({ avatar_url: avatarUrl || null })
+    });
+    const nextUser = { ...payload.user, role: normalizeRole(payload.user.role) };
+    setUser(nextUser);
+    setData(await api("/api/app-data", token));
+    setToast(t("toast.avatarChanged"));
+    setAvatarModalOpen(false);
+  }
+
   async function addLocalRow(collection, row) {
     const savedRow = await saveResource(collection, token, row, "POST");
     setData(await api("/api/app-data", token));
@@ -482,7 +531,7 @@ function MemberHubAppContent({ locale, setLocale }) {
   }
 
   if (booting) {
-    return <BootScreen t={t} />;
+    return null;
   }
 
   if (!user) {
@@ -533,7 +582,11 @@ function MemberHubAppContent({ locale, setLocale }) {
               <LanguageSwitcher locale={locale} setLocale={setLocale} t={t} />
             ) : null}
             <ThemeToggle setTheme={setTheme} t={t} theme={theme} />
-            <span>{displayAccountName(user, t)}</span>
+            <button className="mh-user-chip" type="button" onClick={() => setAvatarModalOpen(true)} title={t("avatar.change")}>
+              <UserAvatar user={user} />
+              <span>{displayAccountName(user, t)}</span>
+              <Camera size={15} aria-hidden="true" />
+            </button>
             <button type="button" onClick={() => setPasswordModalOpen(true)} title={t("auth.changePassword")}>
               <Lock size={17} aria-hidden="true" />
               <span>{t("auth.changePassword")}</span>
@@ -557,6 +610,7 @@ function MemberHubAppContent({ locale, setLocale }) {
               t={t}
               user={user}
               view={view}
+              onChangeAvatar={() => setAvatarModalOpen(true)}
             />
           ) : null}
           {!loading && !data ? <EmptyState t={t} /> : null}
@@ -568,6 +622,15 @@ function MemberHubAppContent({ locale, setLocale }) {
           onClose={() => setPasswordModalOpen(false)}
           onSubmit={changePassword}
           t={t}
+        />
+      ) : null}
+      {avatarModalOpen ? (
+        <AvatarModal
+          customer={data?.customers?.find((item) => Number(item.user_id) === Number(user.id))}
+          onClose={() => setAvatarModalOpen(false)}
+          onSubmit={changeAvatar}
+          t={t}
+          user={user}
         />
       ) : null}
       {toast ? <div className="mh-toast"><Check size={16} />{toast}</div> : null}
@@ -584,26 +647,6 @@ function Brand({ t, role }) {
         <span>{t(roleKeys[role] || "app.tagline")}</span>
       </div>
     </div>
-  );
-}
-
-function BootScreen({ t }) {
-  return (
-    <main className="mh-auth mh-boot">
-      <section className="mh-auth-panel">
-        <div className="mh-auth-brand">
-          <LogoMark />
-          <div>
-            <p>{t("app.name")}</p>
-            <h1>{t("common.loading")}</h1>
-          </div>
-        </div>
-        <div className="mh-boot-state">
-          <Loader2 className="mh-spin" size={22} aria-hidden="true" />
-          <span>{t("common.loading")}</span>
-        </div>
-      </section>
-    </main>
   );
 }
 
@@ -652,11 +695,11 @@ function LogoMark() {
   return <img className="mh-logo" src={withBasePath("/assets/logo.png")} alt="" aria-hidden="true" />;
 }
 
-function DashboardView({ addLocalRow, deleteLocalRow, toggleLockRow, updateLocalRow, view, user, data, t }) {
+function DashboardView({ addLocalRow, deleteLocalRow, toggleLockRow, updateLocalRow, view, user, data, t, onChangeAvatar }) {
   if (view === "overview") return <Overview data={data} t={t} user={user} />;
   if (view === "reports") return <Reports data={data} t={t} />;
   if (view === "scan") return <ScanView addLocalRow={addLocalRow} data={data} t={t} />;
-  if (view === "profile") return <Profile customers={data.customers} t={t} updateLocalRow={updateLocalRow} user={user} />;
+  if (view === "profile") return <Profile customers={data.customers} onChangeAvatar={onChangeAvatar} t={t} updateLocalRow={updateLocalRow} user={user} />;
   if (view === "customers" && isStoreOwner(user)) {
     return (
       <CustomersWorkspace
@@ -1918,7 +1961,17 @@ function RecordTransactionForm({ addLocalRow, card, data, t }) {
   );
 }
 
-function Profile({ customers, t, updateLocalRow, user }) {
+function UserAvatar({ user, fallback, src, className = "" }) {
+  const imageSrc = src !== undefined ? src : avatarUrlFor(user, fallback);
+
+  return (
+    <span className={`mh-avatar ${imageSrc ? "has-image" : ""} ${className}`.trim()}>
+      {imageSrc ? <img src={imageSrc} alt="" /> : initialFor(user)}
+    </span>
+  );
+}
+
+function Profile({ customers, onChangeAvatar, t, updateLocalRow, user }) {
   const customer = customers[0];
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -1949,7 +2002,11 @@ function Profile({ customers, t, updateLocalRow, user }) {
 
   return (
     <section className="mh-card mh-profile">
-      <div className="mh-avatar">{user.name?.charAt(0) || "M"}</div>
+      <UserAvatar className="large" fallback={customer} user={user} />
+      <button className="mh-tool-button slim" type="button" onClick={onChangeAvatar}>
+        <Camera size={16} aria-hidden="true" />
+        <span>{t("avatar.change")}</span>
+      </button>
       <h2>{user.name}</h2>
       <p>{user.email}</p>
       <div className="mh-profile-extra">
@@ -1991,6 +2048,74 @@ function Profile({ customers, t, updateLocalRow, user }) {
         </form>
       ) : null}
     </section>
+  );
+}
+
+function AvatarModal({ customer, onClose, onSubmit, t, user }) {
+  const [preview, setPreview] = useState(avatarUrlFor(user, customer));
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function chooseFile(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setError("");
+      setPreview(await readAvatarFile(file));
+    } catch (avatarError) {
+      setError(avatarError.message || t("avatar.invalid"));
+    }
+  }
+
+  async function submit(event) {
+    event.preventDefault();
+
+    try {
+      setSaving(true);
+      setError("");
+      await onSubmit(preview || null);
+    } catch (avatarError) {
+      setError(avatarError.message || t("avatar.failed"));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="mh-modal-backdrop" role="presentation">
+      <section className="mh-modal" role="dialog" aria-modal="true" aria-labelledby="avatar-title">
+        <header>
+          <h2 id="avatar-title">{t("avatar.change")}</h2>
+          <button type="button" onClick={onClose} title={t("common.cancel")}>
+            <X size={18} />
+          </button>
+        </header>
+        <form className="mh-form mh-avatar-form" onSubmit={submit}>
+          <div className="mh-avatar-preview">
+            <UserAvatar className="large" fallback={customer} src={preview} user={user} />
+            <div>
+              <strong>{displayAccountName(user, t)}</strong>
+              <span>{user.email}</span>
+            </div>
+          </div>
+          <label className="mh-avatar-upload">
+            <Camera size={18} aria-hidden="true" />
+            <span>{t("avatar.upload")}</span>
+            <small>{t("avatar.help")}</small>
+            <input accept="image/*" onChange={chooseFile} type="file" />
+          </label>
+          {error ? <div className="mh-alert">{error}</div> : null}
+          <div className="mh-modal-actions">
+            <button type="button" onClick={() => setPreview("")}>{t("avatar.remove")}</button>
+            <button type="button" onClick={onClose}>{t("common.cancel")}</button>
+            <button className="mh-primary slim" type="submit" disabled={saving}>
+              {saving ? t("common.loading") : t("common.save")}
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>
   );
 }
 
