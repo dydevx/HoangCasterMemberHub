@@ -185,6 +185,26 @@ function addMonthsForInput(dateValue, months) {
   return date.toISOString().slice(0, 10);
 }
 
+function monthsBetweenForInput(startValue, endValue) {
+  if (!startValue || !endValue) return "1";
+  const start = new Date(startValue);
+  const end = new Date(endValue);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) return "1";
+
+  const wholeMonths = (end.getFullYear() - start.getFullYear()) * 12 + end.getMonth() - start.getMonth();
+  const needsPartialMonth = end.getDate() > start.getDate() ? 1 : 0;
+  return String(Math.max(1, wholeMonths + needsPartialMonth));
+}
+
+function normalizeInputDate(value, fallback = todayInputDate()) {
+  if (!value) return fallback;
+  const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (match) return `${match[1]}-${match[2]}-${match[3]}`;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return fallback;
+  return date.toISOString().slice(0, 10);
+}
+
 function generatePassword() {
   return `Mh@${Math.random().toString(36).slice(2, 8)}${Math.floor(1000 + Math.random() * 9000)}`;
 }
@@ -1093,15 +1113,31 @@ function ResourceTable({ addLocalRow, canWrite = false, data, deleteLocalRow, to
 function ShopFormModal({ data, mode, row, title, onClose, onSave, t }) {
   const owners = ownerCandidates(data, row);
   const [ownerMode, setOwnerMode] = useState(row?.owner_id ? "existing" : "new");
-  const [startDate, setStartDate] = useState(row?.subscription_start_date || todayInputDate());
-  const [months, setMonths] = useState("1");
-  const [endDate, setEndDate] = useState(row?.subscription_end_date || addMonthsForInput(row?.subscription_start_date || todayInputDate(), 1));
+  const initialStartDate = normalizeInputDate(row?.subscription_start_date);
+  const initialEndDate = normalizeInputDate(row?.subscription_end_date, addMonthsForInput(initialStartDate, 1));
+  const [startDate, setStartDate] = useState(initialStartDate);
+  const [months, setMonths] = useState(monthsBetweenForInput(initialStartDate, initialEndDate));
+  const [endDate, setEndDate] = useState(initialEndDate);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    setEndDate(addMonthsForInput(startDate, months));
-  }, [startDate, months]);
+  function changeStartDate(value) {
+    const nextStart = normalizeInputDate(value, startDate);
+    setStartDate(nextStart);
+    setEndDate(addMonthsForInput(nextStart, months));
+  }
+
+  function changeMonths(value) {
+    const nextMonths = String(Math.max(1, Number(value || 1)));
+    setMonths(nextMonths);
+    setEndDate(addMonthsForInput(startDate, nextMonths));
+  }
+
+  function changeEndDate(value) {
+    const nextEnd = normalizeInputDate(value, endDate);
+    setEndDate(nextEnd);
+    setMonths(monthsBetweenForInput(startDate, nextEnd));
+  }
 
   async function submit(event) {
     event.preventDefault();
@@ -1223,16 +1259,9 @@ function ShopFormModal({ data, mode, row, title, onClose, onSave, t }) {
                 <option value="premium">{t("subscription.premium")}</option>
               </select>
             </label>
-            <label>{t("subscription.start")}<input name="subscription_start_date" type="date" value={startDate} required onChange={(event) => setStartDate(event.target.value)} /></label>
-            <label>{t("subscription.months")}
-              <select name="subscription_months" value={months} required onChange={(event) => setMonths(event.target.value)}>
-                <option value="1">1</option>
-                <option value="3">3</option>
-                <option value="6">6</option>
-                <option value="12">12</option>
-              </select>
-            </label>
-            <label>{t("subscription.end")}<input name="subscription_end_date" type="date" value={endDate} readOnly /></label>
+            <label>{t("subscription.start")}<input name="subscription_start_date" type="date" value={startDate} required onChange={(event) => changeStartDate(event.target.value)} /></label>
+            <label>{t("subscription.months")}<input name="subscription_months" min="1" step="1" type="number" value={months} required onChange={(event) => changeMonths(event.target.value)} /></label>
+            <label>{t("subscription.end")}<input name="subscription_end_date" type="date" value={endDate} min={startDate} required onChange={(event) => changeEndDate(event.target.value)} /></label>
           </fieldset>
           {error ? <div className="mh-alert">{error}</div> : null}
           <div className="mh-modal-actions">
@@ -1246,15 +1275,31 @@ function ShopFormModal({ data, mode, row, title, onClose, onSave, t }) {
 }
 
 function RenewShopModal({ row, onClose, onSave, t }) {
-  const [startDate, setStartDate] = useState(row?.subscription_start_date || todayInputDate());
-  const [months, setMonths] = useState("1");
-  const [endDate, setEndDate] = useState(addMonthsForInput(row?.subscription_start_date || todayInputDate(), 1));
+  const initialStartDate = normalizeInputDate(row?.subscription_start_date);
+  const initialEndDate = normalizeInputDate(row?.subscription_end_date, addMonthsForInput(initialStartDate, 1));
+  const [startDate, setStartDate] = useState(initialStartDate);
+  const [months, setMonths] = useState(monthsBetweenForInput(initialStartDate, initialEndDate));
+  const [endDate, setEndDate] = useState(initialEndDate);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    setEndDate(addMonthsForInput(startDate, months));
-  }, [startDate, months]);
+  function changeStartDate(value) {
+    const nextStart = normalizeInputDate(value, startDate);
+    setStartDate(nextStart);
+    setEndDate(addMonthsForInput(nextStart, months));
+  }
+
+  function changeMonths(value) {
+    const nextMonths = String(Math.max(1, Number(value || 1)));
+    setMonths(nextMonths);
+    setEndDate(addMonthsForInput(startDate, nextMonths));
+  }
+
+  function changeEndDate(value) {
+    const nextEnd = normalizeInputDate(value, endDate);
+    setEndDate(nextEnd);
+    setMonths(monthsBetweenForInput(startDate, nextEnd));
+  }
 
   async function submit(event) {
     event.preventDefault();
@@ -1293,16 +1338,9 @@ function RenewShopModal({ row, onClose, onSave, t }) {
               <option value="premium">{t("subscription.premium")}</option>
             </select>
           </label>
-          <label>{t("subscription.start")}<input type="date" value={startDate} required onChange={(event) => setStartDate(event.target.value)} /></label>
-          <label>{t("subscription.months")}
-            <select value={months} onChange={(event) => setMonths(event.target.value)}>
-              <option value="1">1</option>
-              <option value="3">3</option>
-              <option value="6">6</option>
-              <option value="12">12</option>
-            </select>
-          </label>
-          <label>{t("subscription.end")}<input type="date" value={endDate} readOnly /></label>
+          <label>{t("subscription.start")}<input type="date" value={startDate} required onChange={(event) => changeStartDate(event.target.value)} /></label>
+          <label>{t("subscription.months")}<input min="1" step="1" type="number" value={months} required onChange={(event) => changeMonths(event.target.value)} /></label>
+          <label>{t("subscription.end")}<input type="date" value={endDate} min={startDate} required onChange={(event) => changeEndDate(event.target.value)} /></label>
           <label>{t("transaction.note")}<textarea name="subscription_renewal_note" rows={3} /></label>
           {error ? <div className="mh-alert">{error}</div> : null}
           <div className="mh-modal-actions">
