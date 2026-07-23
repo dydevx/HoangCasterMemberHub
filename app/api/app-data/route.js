@@ -339,6 +339,10 @@ function shapeData(data) {
   };
 }
 
+function withCurrentUser(user, data) {
+  return { ...data, currentUser: user };
+}
+
 export async function GET(request) {
   const supabase = createSupabaseServerClient({ useServiceRole: true });
 
@@ -349,11 +353,11 @@ export async function GET(request) {
 
   try {
     if (isStoreOwner(auth.user)) {
-      return NextResponse.json(shapeData(await readStoreOwnerData(supabase, auth.user)));
+      return NextResponse.json(withCurrentUser(auth.user, shapeData(await readStoreOwnerData(supabase, auth.user))));
     }
 
     if (isCustomer(auth.user)) {
-      return NextResponse.json(shapeData(await readCustomerData(supabase, auth.user)));
+      return NextResponse.json(withCurrentUser(auth.user, shapeData(await readCustomerData(supabase, auth.user))));
     }
 
     const [shops, storeUsers, users, customers, services, levels, cards, transactions, promotions, activityLogs, notifications, settings, languages] = await Promise.all([
@@ -388,7 +392,7 @@ export async function GET(request) {
       languages
     });
 
-    return NextResponse.json(scopedData(auth.user, shaped));
+    return NextResponse.json(withCurrentUser(auth.user, scopedData(auth.user, shaped)));
   } catch (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

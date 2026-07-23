@@ -44,6 +44,7 @@ import { createTranslator, locales } from "@/messages/memberhub";
 
 const appBasePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 const appAliasPath = "/HoangCasterMemberHub";
+const bootstrapRequests = new Map();
 
 const navItems = {
   super_admin: [
@@ -288,6 +289,25 @@ async function api(path, token, options = {}) {
   return payload;
 }
 
+function loadBootstrapData(token) {
+  if (!bootstrapRequests.has(token)) {
+    const request = api("/api/app-data", token)
+      .then((payload) => {
+        const { currentUser, ...data } = payload;
+        if (!currentUser) throw new Error("Unable to load the current session.");
+        return { user: currentUser, data };
+      })
+      .catch((error) => {
+        bootstrapRequests.delete(token);
+        throw error;
+      });
+
+    bootstrapRequests.set(token, request);
+  }
+
+  return bootstrapRequests.get(token);
+}
+
 async function saveResource(collection, token, row, method) {
   const payload = await api(`/api/memberhub/${collection}`, token, {
     method,
@@ -402,18 +422,11 @@ function MemberHubAppContent({ locale, setLocale }) {
       return;
     }
 
-    setLoading(true);
-    Promise.all([
-      api("/api/me", savedToken),
-      api("/api/app-data", savedToken)
-    ])
-      .then(([payload, nextData]) => {
+    loadBootstrapData(savedToken)
+      .then(({ user: sessionUser, data: nextData }) => {
         if (ignore) return;
-        if (!payload?.user) {
-          throw new Error(t("common.actionFailed"));
-        }
 
-        const nextUser = { ...payload.user, role: normalizeRole(payload.user.role) };
+        const nextUser = { ...sessionUser, role: normalizeRole(sessionUser.role) };
         if (!currentPathMatchesUser(nextUser, nextData)) {
           setToken("");
           return;
@@ -424,7 +437,6 @@ function MemberHubAppContent({ locale, setLocale }) {
         setLocale(isSuperAdmin(nextUser) ? "vi" : readStored("memberhub_locale", nextUser.locale || "vi"));
         setView(isCustomer(nextUser) ? "cards" : "overview");
         setData(nextData);
-        router.replace(dashboardPathFor(nextUser, nextData));
       })
       .catch((error) => {
         if (ignore) return;
@@ -437,7 +449,6 @@ function MemberHubAppContent({ locale, setLocale }) {
       })
       .finally(() => {
         if (ignore) return;
-        setLoading(false);
         setBooting(false);
       });
 
@@ -496,6 +507,7 @@ function MemberHubAppContent({ locale, setLocale }) {
   }
 
   function logout() {
+    bootstrapRequests.delete(token);
     localStorage.removeItem("memberhub_token");
     setToken("");
     setUser(null);
@@ -553,11 +565,7 @@ function MemberHubAppContent({ locale, setLocale }) {
   }
 
   if (booting) {
-    return (
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh" }}>
-        <LoadingState t={t} />
-      </div>
-    );
+    return <AppBootSkeleton t={t} />;
   }
 
   if (!user) {
@@ -2308,6 +2316,38 @@ function ThemeToggle({ setTheme, t, theme }) {
 
 function LoadingState({ t }) {
   return <div className="mh-empty loading"><Loader2 className="mh-spin" size={18} />{t("common.loading")}</div>;
+}
+
+function AppBootSkeleton({ t }) {
+  return (
+    <main className="mh-boot" aria-busy="true" aria-live="polite">
+      <aside className="mh-boot-sidebar" aria-hidden="true">
+        <div className="mh-boot-brand">
+          <span className="mh-boot-block square" />
+          <span className="mh-boot-block brand-line" />
+        </div>
+        <div className="mh-boot-nav">
+          {[0, 1, 2, 3, 4].map((item) => <span className="mh-boot-block nav-line" key={item} />)}
+        </div>
+      </aside>
+      <section className="mh-boot-workspace">
+        <header className="mh-boot-topbar">
+          <div>
+            <span className="mh-boot-block breadcrumb-line" />
+            <span className="mh-boot-block title-line" />
+          </div>
+          <span className="mh-boot-block account-line" />
+        </header>
+        <div className="mh-boot-content" aria-hidden="true">
+          <div className="mh-boot-stats">
+            {[0, 1, 2, 3].map((item) => <span className="mh-boot-block stat-block" key={item} />)}
+          </div>
+          <span className="mh-boot-block content-block" />
+        </div>
+        <p className="mh-boot-status" role="status">{t("common.loading")}</p>
+      </section>
+    </main>
+  );
 }
 
 function EmptyState({ t }) {

@@ -639,6 +639,115 @@ code {
   }
 }
 
+/* Stable app-shell skeleton used only during the initial authenticated bootstrap. */
+.mh-boot {
+  background: var(--mh-bg);
+  color: var(--mh-text);
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  min-height: 100dvh;
+}
+
+.mh-boot-sidebar {
+  background: linear-gradient(180deg, #1d4ed8, #0f172a);
+  padding: 1.2rem;
+}
+
+.mh-boot-brand,
+.mh-boot-topbar {
+  align-items: center;
+  display: flex;
+  gap: 0.8rem;
+}
+
+.mh-boot-nav {
+  display: grid;
+  gap: 0.65rem;
+  margin-top: 2rem;
+}
+
+.mh-boot-workspace {
+  min-width: 0;
+  position: relative;
+}
+
+.mh-boot-topbar {
+  background: var(--mh-panel);
+  border-bottom: 1px solid var(--mh-line);
+  justify-content: space-between;
+  min-height: 94px;
+  padding: 1rem clamp(1rem, 3vw, 2rem);
+}
+
+.mh-boot-topbar > div {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.mh-boot-content {
+  display: grid;
+  gap: 1.25rem;
+  padding: clamp(1rem, 3vw, 2rem);
+}
+
+.mh-boot-stats {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.mh-boot-block {
+  animation: mh-skeleton-shift 1.35s ease-in-out infinite;
+  background: linear-gradient(100deg, var(--mh-panel-soft) 25%, color-mix(in srgb, var(--mh-brand) 10%, var(--mh-panel)) 45%, var(--mh-panel-soft) 65%);
+  background-size: 220% 100%;
+  border-radius: 8px;
+  display: block;
+}
+
+.mh-boot-sidebar .mh-boot-block {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.mh-boot-block.square { height: 42px; width: 42px; }
+.mh-boot-block.brand-line { height: 18px; width: 132px; }
+.mh-boot-block.nav-line { height: 42px; width: 100%; }
+.mh-boot-block.breadcrumb-line { height: 10px; width: 150px; }
+.mh-boot-block.title-line { height: 25px; width: 220px; }
+.mh-boot-block.account-line { height: 42px; width: min(320px, 30vw); }
+.mh-boot-block.stat-block { height: 112px; }
+.mh-boot-block.content-block { height: min(420px, 52vh); }
+
+.mh-boot-status {
+  bottom: 1.2rem;
+  color: var(--mh-muted);
+  font-size: 0.875rem;
+  left: 50%;
+  margin: 0;
+  position: absolute;
+  transform: translateX(-50%);
+}
+
+@keyframes mh-skeleton-shift {
+  0% { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+
+@media (max-width: 900px) {
+  .mh-boot { grid-template-columns: 1fr; }
+  .mh-boot-sidebar { min-height: 92px; }
+  .mh-boot-nav { display: none; }
+}
+
+@media (max-width: 640px) {
+  .mh-boot-topbar { align-items: flex-start; }
+  .mh-boot-block.account-line { width: 72px; }
+  .mh-boot-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mh-boot-block { animation: none; }
+}
+
 /* MemberHub app */
 .mh-entry,
 .mh-auth {
