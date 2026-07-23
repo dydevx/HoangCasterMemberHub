@@ -9,6 +9,7 @@ dotenv.config({ path: ".env", override: false, quiet: true });
 
 const args = process.argv.slice(2);
 const dryRun = args.includes("--dry-run");
+const allowDestructive = args.includes("--allow-destructive");
 const sqlFile = args.find((arg) => !arg.startsWith("--")) || "database/supabase_schema.sql";
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || "";
 const databaseUrl = process.env.SUPABASE_DB_URL || process.env.DATABASE_URL;
@@ -47,6 +48,22 @@ if (!databaseUrl && (!supabaseUrl || !databasePassword)) {
 const connectionString = databaseUrl || defaultDatabaseUrl();
 const sql = await readFile(sqlFile, "utf8");
 const statementCount = sql.split(";").filter((part) => part.trim()).length;
+const destructivePatterns = [
+  /\btruncate\b/i,
+  /\bdelete\s+from\b/i,
+  /\bdrop\s+table\b/i,
+  /\balter\s+table[\s\S]*?\bdrop\s+column\b/i
+];
+const containsDestructiveSql = destructivePatterns.some((pattern) => pattern.test(sql));
+
+if (containsDestructiveSql && (!allowDestructive || process.env.DB_IMPORT_CONFIRM !== "ALLOW_DESTRUCTIVE")) {
+  console.error([
+    `Blocked destructive SQL in ${sqlFile}.`,
+    "Create and verify a database backup first.",
+    "To run an intentionally reviewed migration, pass --allow-destructive and set DB_IMPORT_CONFIRM=ALLOW_DESTRUCTIVE."
+  ].join("\n"));
+  process.exit(1);
+}
 
 if (dryRun) {
   console.log(`Ready to import ${sqlFile} (${statementCount} SQL chunks before parsing).`);

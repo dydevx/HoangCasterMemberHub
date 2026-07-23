@@ -907,7 +907,6 @@ async function deleteResource(request, params) {
     }
   }
 
-  let deletedCustomerUserId = null;
   if (collection === "customers") {
     const { data: customer, error: customerError } = await supabase
       .from("customers")
@@ -919,7 +918,6 @@ async function deleteResource(request, params) {
       return NextResponse.json({ error: "Khong tim thay ho so khach hang" }, { status: 404 });
     }
 
-    deletedCustomerUserId = customer.user_id;
   }
 
   let previousTransaction = null;
@@ -940,21 +938,6 @@ async function deleteResource(request, params) {
 
   if (previousTransaction) {
     await applyTransactionToCard(supabase, { ...previousTransaction, amount: 0, points_delta: 0 }, previousTransaction);
-  }
-
-  if (deletedCustomerUserId) {
-    const { count } = await supabase
-      .from("customers")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", deletedCustomerUserId);
-
-    if (!count) {
-      await supabase
-        .from("member_users")
-        .delete()
-        .eq("id", deletedCustomerUserId)
-        .eq("role", "customer");
-    }
   }
 
   return NextResponse.json({ ok: true, id });

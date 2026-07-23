@@ -3,6 +3,7 @@ import { normalizeRole, roleMatches } from "@/lib/memberhub/access";
 import { createSupabaseServerClient } from "@/lib/supabaseServer";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { checkRateLimit } from "@/lib/rateLimit";
 
 const loginSchema = z.object({
   role: z.enum(["admin", "owner", "customer", "super_admin", "store_owner"]).optional().or(z.literal("")),
@@ -11,6 +12,14 @@ const loginSchema = z.object({
 });
 
 export async function POST(request) {
+  const rateLimit = checkRateLimit(request, { key: "login", limit: 10, windowMs: 15 * 60 * 1000 });
+  if (!rateLimit.allowed) {
+    return NextResponse.json(
+      { error: "Qua nhieu lan dang nhap. Vui long thu lai sau." },
+      { status: 429, headers: { "Retry-After": String(rateLimit.retryAfter) } }
+    );
+  }
+
   const supabase = createSupabaseServerClient({ useServiceRole: true });
   const authClient = createSupabaseServerClient();
 
@@ -53,10 +62,14 @@ export async function POST(request) {
     return NextResponse.json({ error: "Tai khoan dang bi khoa" }, { status: 403 });
   }
 
-  return NextResponse.json({
-    authProvider: supabaseAuthMatches ? "supabase" : "memberhub",
-    emailVerified: authData?.user?.email_confirmed_at ? true : null,
-    token: signToken({ sub: user.id, role: normalizeRole(user.role) }),
-    user: publicUser(user)
-  });
+  try {
+    return NextResponse.json({
+      authProvider: supabaseAuthMatches ? "supabase" : "memberhub",
+      emailVerified: authData?.user?.email_confirmed_at ? true : null,
+      token: signToken({ sub: user.id, role: normalizeRole(user.role) }),
+      user: publicUser(user)
+    });
+  } catch {
+    return NextResponse.json({ error: "Server chua cau hinh bao mat dang nhap." }, { status: 500 });
+  }
 }
