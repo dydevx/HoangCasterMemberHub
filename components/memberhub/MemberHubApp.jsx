@@ -32,7 +32,6 @@ import {
   Trash2,
   Unlock,
   UserRound,
-  UsersRound,
   X
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -218,7 +217,12 @@ function normalizeInputDate(value, fallback = todayInputDate()) {
 }
 
 function generatePassword() {
-  return `Mh@${Math.random().toString(36).slice(2, 8)}${Math.floor(1000 + Math.random() * 9000)}`;
+  const randomBytes = new Uint8Array(8);
+  crypto.getRandomValues(randomBytes);
+  const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+  const suffix = Array.from(randomBytes.slice(0, 6), (byte) => chars[byte % chars.length]).join("");
+  const digits = 1000 + ((randomBytes[6] * 256 + randomBytes[7]) % 9000);
+  return `Mh@${suffix}${digits}`;
 }
 
 function userName(user) {
@@ -276,7 +280,9 @@ async function api(path, token, options = {}) {
   const payload = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    throw new Error(payload.error || payload.message || "Unable to load data.");
+    const error = new Error(payload.error || payload.message || "Unable to load data.");
+    error.status = response.status;
+    throw error;
   }
 
   return payload;
@@ -388,6 +394,7 @@ function MemberHubAppContent({ locale, setLocale }) {
   };
 
   useEffect(() => {
+    let ignore = false;
     setTheme(readStored("memberhub_theme", "light"));
     const savedToken = localStorage.getItem("memberhub_token") || "";
     if (!savedToken) {
@@ -401,6 +408,11 @@ function MemberHubAppContent({ locale, setLocale }) {
       api("/api/app-data", savedToken)
     ])
       .then(([payload, nextData]) => {
+        if (ignore) return;
+        if (!payload?.user) {
+          throw new Error(t("common.actionFailed"));
+        }
+
         const nextUser = { ...payload.user, role: normalizeRole(payload.user.role) };
         if (!currentPathMatchesUser(nextUser, nextData)) {
           setToken("");
@@ -414,14 +426,24 @@ function MemberHubAppContent({ locale, setLocale }) {
         setData(nextData);
         router.replace(dashboardPathFor(nextUser, nextData));
       })
-      .catch(() => {
-        localStorage.removeItem("memberhub_token");
-        setToken("");
+      .catch((error) => {
+        if (ignore) return;
+        if (error?.status === 401 || error?.status === 403) {
+          localStorage.removeItem("memberhub_token");
+          setToken("");
+        } else {
+          setStatus(error.message || t("common.actionFailed"));
+        }
       })
       .finally(() => {
+        if (ignore) return;
         setLoading(false);
         setBooting(false);
       });
+
+    return () => {
+      ignore = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -531,7 +553,11 @@ function MemberHubAppContent({ locale, setLocale }) {
   }
 
   if (booting) {
-    return null;
+    return (
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh" }}>
+        <LoadingState t={t} />
+      </div>
+    );
   }
 
   if (!user) {
@@ -738,47 +764,69 @@ function DashboardView({ addLocalRow, deleteLocalRow, toggleLockRow, updateLocal
 }
 
 function Overview({ data, t, user }) {
-  const revenue = data.transactions.reduce((sum, item) => sum + Number(item.amount || 0), 0);
-  const points = data.cards.reduce((sum, item) => sum + Number(item.points || 0), 0);
-  const newCustomers = data.customers.filter((item) => {
-    const created = new Date(item.created_at || Date.now());
-    return Date.now() - created.getTime() < 1000 * 60 * 60 * 24 * 30;
-  }).length;
-  const topServices = rankBy(data.transactions, "service_name", "amount").slice(0, 5);
-  const shopsWithSubscription = data.shops.map((shop) => ({
-    ...shop,
-    computed_subscription_status: subscriptionStatus(shop),
-    computed_remaining_days: shop.remaining_days ?? daysUntil(shop.subscription_end_date)
-  }));
-  const activeShops = shopsWithSubscription.filter((shop) => shop.computed_subscription_status === "active").length;
-  const expiringShops = shopsWithSubscription.filter((shop) => shop.computed_subscription_status === "expiring").length;
-  const expiredShops = shopsWithSubscription.filter((shop) => shop.computed_subscription_status === "expired").length;
-  const alerts = shopsWithSubscription
-    .filter((shop) => shop.computed_subscription_status === "expired" || (shop.computed_remaining_days !== null && shop.computed_remaining_days <= 30))
-    .sort((left, right) => Number(left.computed_remaining_days ?? 9999) - Number(right.computed_remaining_days ?? 9999))
-    .slice(0, 8);
-  const currentShop = isStoreOwner(user) ? shopsWithSubscription[0] : null;
+  const {
+    transactions,
+    customers,
+    shops,
+    revenue,
+    points,
+    newCustomers,
+    topServices,
+    activeShops,
+    expiringShops,
+    expiredShops,
+    alerts,
+    currentShop
+  } = useMemo(() => {
+    const transactions = data.transactions ?? [];
+    const cards = data.cards ?? [];
+    const customers = data.customers ?? [];
+    const shops = data.shops ?? [];
+
+    const revenue = transactions.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    const points = cards.reduce((sum, item) => sum + Number(item.points || 0), 0);
+    const newCustomers = customers.filter((item) => {
+      const created = new Date(item.created_at || Date.now());
+      return Date.now() - created.getTime() < 1000 * 60 * 60 * 24 * 30;
+    }).length;
+    const topServices = rankBy(transactions, "service_name", "amount").slice(0, 5);
+    const shopsWithSubscription = shops.map((shop) => ({
+      ...shop,
+      computed_subscription_status: subscriptionStatus(shop),
+      computed_remaining_days: shop.remaining_days ?? daysUntil(shop.subscription_end_date)
+    }));
+    const activeShops = shopsWithSubscription.filter((shop) => shop.computed_subscription_status === "active").length;
+    const expiringShops = shopsWithSubscription.filter((shop) => shop.computed_subscription_status === "expiring").length;
+    const expiredShops = shopsWithSubscription.filter((shop) => shop.computed_subscription_status === "expired").length;
+    const alerts = shopsWithSubscription
+      .filter((shop) => shop.computed_subscription_status === "expired" || (shop.computed_remaining_days !== null && shop.computed_remaining_days <= 30))
+      .sort((left, right) => Number(left.computed_remaining_days ?? 9999) - Number(right.computed_remaining_days ?? 9999))
+      .slice(0, 8);
+    const currentShop = isStoreOwner(user) ? shopsWithSubscription[0] : null;
+
+    return { transactions, customers, shops, revenue, points, newCustomers, topServices, activeShops, expiringShops, expiredShops, alerts, currentShop };
+  }, [data, user]);
 
   return (
     <>
       <div className="mh-stats">
         {isSuperAdmin(user) ? (
           <>
-            <Stat label={t("dashboard.shops")} value={data.shops.length} />
+            <Stat label={t("dashboard.shops")} value={shops.length} />
             <Stat label={t("dashboard.activeShops")} value={activeShops} />
             <Stat label={t("dashboard.expiringShops")} value={expiringShops} />
             <Stat label={t("dashboard.expiredShops")} value={expiredShops} />
-            <Stat label={t("dashboard.customers")} value={data.customers.length} />
+            <Stat label={t("dashboard.customers")} value={customers.length} />
             <Stat label={t("dashboard.newCustomers")} value={newCustomers} />
-            <Stat label={t("dashboard.transactions")} value={data.transactions.length} />
+            <Stat label={t("dashboard.transactions")} value={transactions.length} />
           </>
         ) : (
           <>
             <Stat label={currentShop?.name || t("shop.name")} value={currentShop?.computed_remaining_days === null ? "-" : `${currentShop?.computed_remaining_days ?? "-"} ${t("common.days")}`} />
-            <Stat label={t("dashboard.customers")} value={data.customers.length} />
+            <Stat label={t("dashboard.customers")} value={customers.length} />
             <Stat label={t("dashboard.newCustomers")} value={newCustomers} />
             <Stat label={t("dashboard.revenue")} value={money(revenue)} />
-            <Stat label={t("dashboard.transactions")} value={data.transactions.length} />
+            <Stat label={t("dashboard.transactions")} value={transactions.length} />
             <Stat label={t("dashboard.points")} value={points.toLocaleString("vi-VN")} />
           </>
         )}
@@ -820,7 +868,7 @@ function Overview({ data, t, user }) {
           columns={getColumns("transactions", t, data)}
           compact
           data={data}
-          rows={data.transactions.slice(0, 6)}
+          rows={transactions.slice(0, 6)}
           t={t}
           view="transactions"
         />
@@ -941,6 +989,7 @@ function Reports({ data, t }) {
 
 function ResourceTable({ addLocalRow, canWrite = false, data, deleteLocalRow, toggleLockRow, updateLocalRow, collection, columns, compact = false, rows, t, view }) {
   const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [status, setStatus] = useState("all");
   const [page, setPage] = useState(1);
   const [modalMode, setModalMode] = useState("");
@@ -957,19 +1006,25 @@ function ResourceTable({ addLocalRow, canWrite = false, data, deleteLocalRow, to
   }, [rows, view]);
 
   const statuses = useMemo(() => ["all", ...new Set(orderedRows.map((row) => row.status).filter(Boolean))], [orderedRows]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedQuery(query), 200);
+    return () => clearTimeout(timer);
+  }, [query]);
+
   const filtered = useMemo(() => {
-    const needle = query.trim().toLowerCase();
+    const needle = debouncedQuery.trim().toLowerCase();
     return orderedRows.filter((row) => {
       const matchesText = !needle || Object.values(row).join(" ").toLowerCase().includes(needle);
       const matchesStatus = status === "all" || row.status === status;
       return matchesText && matchesStatus;
     });
-  }, [orderedRows, query, status]);
+  }, [orderedRows, debouncedQuery, status]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const visible = filtered.slice((page - 1) * pageSize, page * pageSize);
 
-  useEffect(() => setPage(1), [query, status, view]);
+  useEffect(() => setPage(1), [debouncedQuery, status, view]);
 
   return (
     <div className={`mh-resource ${compact ? "compact" : ""}`}>
@@ -1153,7 +1208,25 @@ function ResourceTable({ addLocalRow, canWrite = false, data, deleteLocalRow, to
   );
 }
 
+function useCloseOnEscape(onClose) {
+  useEffect(() => {
+    function handleKeyDown(event) {
+      if (event.key === "Escape") onClose();
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+}
+
+function closeOnBackdropClick(onClose) {
+  return (event) => {
+    if (event.target === event.currentTarget) onClose();
+  };
+}
+
 function ShopFormModal({ data, mode, row, title, onClose, onSave, t }) {
+  useCloseOnEscape(onClose);
   const owners = ownerCandidates(data, row);
   const [ownerMode, setOwnerMode] = useState(row?.owner_id ? "existing" : "new");
   const initialStartDate = normalizeInputDate(row?.subscription_start_date);
@@ -1233,7 +1306,7 @@ function ShopFormModal({ data, mode, row, title, onClose, onSave, t }) {
   }
 
   return (
-    <div className="mh-modal-backdrop" role="presentation">
+    <div className="mh-modal-backdrop" role="presentation" onClick={closeOnBackdropClick(onClose)}>
       <section className="mh-modal mh-wide-modal" role="dialog" aria-modal="true">
         <header>
           <h2>{title || (mode === "edit" ? t("shop.editShop") : t("shop.addShop"))}</h2>
@@ -1318,6 +1391,7 @@ function ShopFormModal({ data, mode, row, title, onClose, onSave, t }) {
 }
 
 function RenewShopModal({ row, onClose, onSave, t }) {
+  useCloseOnEscape(onClose);
   const initialStartDate = normalizeInputDate(row?.subscription_start_date);
   const initialEndDate = normalizeInputDate(row?.subscription_end_date, addMonthsForInput(initialStartDate, 1));
   const [startDate, setStartDate] = useState(initialStartDate);
@@ -1367,7 +1441,7 @@ function RenewShopModal({ row, onClose, onSave, t }) {
   }
 
   return (
-    <div className="mh-modal-backdrop" role="presentation">
+    <div className="mh-modal-backdrop" role="presentation" onClick={closeOnBackdropClick(onClose)}>
       <section className="mh-modal" role="dialog" aria-modal="true">
         <header>
           <h2>{t("subscription.renew")}</h2>
@@ -1397,11 +1471,12 @@ function RenewShopModal({ row, onClose, onSave, t }) {
 }
 
 function ShopDetailModal({ data, row, onClose, t }) {
+  useCloseOnEscape(onClose);
   const owner = currentOwner(row, data);
   const employees = Math.max(0, Number(row?.employee_count || 0));
 
   return (
-    <div className="mh-modal-backdrop" role="presentation">
+    <div className="mh-modal-backdrop" role="presentation" onClick={closeOnBackdropClick(onClose)}>
       <section className="mh-modal" role="dialog" aria-modal="true">
         <header>
           <h2>{t("shop.viewDetails")}</h2>
@@ -1424,6 +1499,7 @@ function ShopDetailModal({ data, row, onClose, t }) {
 }
 
 function ShopAccountModal({ addLocalRow, data, deleteLocalRow, row, onClose, t, updateLocalRow }) {
+  useCloseOnEscape(onClose);
   const owner = currentOwner(row, data);
   const owners = ownerCandidates(data, row);
   const [ownerMode, setOwnerMode] = useState("existing");
@@ -1503,7 +1579,7 @@ function ShopAccountModal({ addLocalRow, data, deleteLocalRow, row, onClose, t, 
   }
 
   return (
-    <div className="mh-modal-backdrop" role="presentation">
+    <div className="mh-modal-backdrop" role="presentation" onClick={closeOnBackdropClick(onClose)}>
       <section className="mh-modal mh-wide-modal" role="dialog" aria-modal="true">
         <header>
           <h2>{t("account.manage")}</h2>
@@ -1569,6 +1645,7 @@ function ShopAccountModal({ addLocalRow, data, deleteLocalRow, row, onClose, t, 
 }
 
 function CustomerAccountModal({ row, onClose, t, updateLocalRow }) {
+  useCloseOnEscape(onClose);
   const [password, setPassword] = useState("");
   const [generatedPassword, setGeneratedPassword] = useState("");
   const [saving, setSaving] = useState(false);
@@ -1603,7 +1680,7 @@ function CustomerAccountModal({ row, onClose, t, updateLocalRow }) {
   }
 
   return (
-    <div className="mh-modal-backdrop" role="presentation">
+    <div className="mh-modal-backdrop" role="presentation" onClick={closeOnBackdropClick(onClose)}>
       <section className="mh-modal" role="dialog" aria-modal="true">
         <header>
           <h2>{t("account.customerAccount")}</h2>
@@ -1633,6 +1710,7 @@ function CustomerAccountModal({ row, onClose, t, updateLocalRow }) {
 }
 
 function ResourceModal({ fields, mode, row, title, onClose, onSave, t }) {
+  useCloseOnEscape(onClose);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -1660,7 +1738,7 @@ function ResourceModal({ fields, mode, row, title, onClose, onSave, t }) {
   }
 
   return (
-    <div className="mh-modal-backdrop" role="presentation">
+    <div className="mh-modal-backdrop" role="presentation" onClick={closeOnBackdropClick(onClose)}>
       <section className="mh-modal" role="dialog" aria-modal="true">
         <header>
           <h2>{title || (mode === "edit" ? t("common.edit") : t("common.add"))}</h2>
@@ -1687,6 +1765,19 @@ function TableRow({ canWrite, collection, columns, compact, data, deleteLocalRow
   const protectedAdmin = collection === "users" && isSuperAdmin(row);
   const isShopRow = collection === "shops";
   const isCustomerRow = collection === "customers";
+  const [busyAction, setBusyAction] = useState("");
+
+  async function runRowAction(action, actionRunner) {
+    if (busyAction) return;
+    setBusyAction(action);
+    try {
+      await actionRunner();
+    } catch (actionError) {
+      window.alert(actionError.message || t("common.actionFailed"));
+    } finally {
+      setBusyAction("");
+    }
+  }
 
   return (
     <tr>
@@ -1774,24 +1865,32 @@ function TableRow({ canWrite, collection, columns, compact, data, deleteLocalRow
               <button
                 className="mh-icon-action"
                 type="button"
+                disabled={Boolean(busyAction)}
                 title={row.status === "locked" ? t("common.unlock") : t("common.lock")}
-                onClick={() => toggleLockRow(collection, row)}
+                onClick={() => runRowAction("lock", () => toggleLockRow(collection, row))}
               >
-                {row.status === "locked" ? <Unlock size={16} /> : <Lock size={16} />}
+                {busyAction === "lock" ? (
+                  <Loader2 className="mh-spin" size={16} />
+                ) : row.status === "locked" ? (
+                  <Unlock size={16} />
+                ) : (
+                  <Lock size={16} />
+                )}
               </button>
             ) : null}
             {!protectedAdmin && deleteLocalRow ? (
               <button
                 className="mh-icon-action danger"
                 type="button"
+                disabled={Boolean(busyAction)}
                 title={t("common.delete")}
                 onClick={() => {
                   if (window.confirm(t("common.confirmDelete"))) {
-                    deleteLocalRow(collection, row);
+                    runRowAction("delete", () => deleteLocalRow(collection, row));
                   }
                 }}
               >
-                <Trash2 size={16} />
+                {busyAction === "delete" ? <Loader2 className="mh-spin" size={16} /> : <Trash2 size={16} />}
               </button>
             ) : null}
           </div>
@@ -1972,7 +2071,7 @@ function UserAvatar({ user, fallback, src, className = "" }) {
 }
 
 function Profile({ customers, onChangeAvatar, t, updateLocalRow, user }) {
-  const customer = customers[0];
+  const customer = customers?.[0];
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -2046,12 +2145,15 @@ function Profile({ customers, onChangeAvatar, t, updateLocalRow, user }) {
             {saving ? t("common.loading") : t("common.save")}
           </button>
         </form>
-      ) : null}
+      ) : (
+        <div className="mh-empty">{t("common.empty")}</div>
+      )}
     </section>
   );
 }
 
 function AvatarModal({ customer, onClose, onSubmit, t, user }) {
+  useCloseOnEscape(onClose);
   const [preview, setPreview] = useState(avatarUrlFor(user, customer));
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -2083,7 +2185,7 @@ function AvatarModal({ customer, onClose, onSubmit, t, user }) {
   }
 
   return (
-    <div className="mh-modal-backdrop" role="presentation">
+    <div className="mh-modal-backdrop" role="presentation" onClick={closeOnBackdropClick(onClose)}>
       <section className="mh-modal" role="dialog" aria-modal="true" aria-labelledby="avatar-title">
         <header>
           <h2 id="avatar-title">{t("avatar.change")}</h2>
@@ -2120,6 +2222,7 @@ function AvatarModal({ customer, onClose, onSubmit, t, user }) {
 }
 
 function PasswordModal({ onClose, onSubmit, t }) {
+  useCloseOnEscape(onClose);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -2147,7 +2250,7 @@ function PasswordModal({ onClose, onSubmit, t }) {
   }
 
   return (
-    <div className="mh-modal-backdrop" role="presentation">
+    <div className="mh-modal-backdrop" role="presentation" onClick={closeOnBackdropClick(onClose)}>
       <section className="mh-modal" role="dialog" aria-modal="true" aria-labelledby="password-title">
         <header>
           <h2 id="password-title">{t("auth.changePassword")}</h2>
@@ -2575,18 +2678,7 @@ function getEditableFields(view, t, data = {}) {
 
 function StatusBadge({ t, value }) {
   const status = value || "active";
-  const label = {
-    active: t("common.active"),
-    inactive: t("common.inactive"),
-    locked: t("common.locked"),
-    expiring: t("common.expiring"),
-    expired: t("common.expired"),
-    suspended: t("common.suspended"),
-    read: t("common.read"),
-    unread: t("common.unread")
-  }[status] || status;
-
-  return <span className={`mh-status ${status}`}>{label}</span>;
+  return <span className={`mh-status ${status}`}>{statusLabel(t, status)}</span>;
 }
 
 function optionList(rows = [], valueKey, labelFor) {
