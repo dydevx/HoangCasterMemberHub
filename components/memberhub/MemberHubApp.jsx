@@ -492,11 +492,12 @@ function MemberHubAppContent({ locale, setLocale }) {
       localStorage.setItem("memberhub_token", payload.token);
       const nextUser = { ...payload.user, role: normalizeRole(payload.user.role) };
       const nextLocale = isSuperAdmin(nextUser) ? "vi" : nextUser.locale || locale;
+      const nextData = await api("/api/app-data", payload.token);
+
       setToken(payload.token);
       setUser(nextUser);
       setLocale(nextLocale);
       setView(isCustomer(nextUser) ? "cards" : "overview");
-      const nextData = await api("/api/app-data", payload.token);
       setData(nextData);
       router.replace(dashboardPathFor(nextUser, nextData));
     } catch (error) {
@@ -633,8 +634,7 @@ function MemberHubAppContent({ locale, setLocale }) {
         </header>
 
         <main className="mh-view">
-          {loading ? <LoadingState t={t} /> : null}
-          {!loading && data ? (
+          {data ? (
             <DashboardView
               addLocalRow={addLocalRow}
               deleteLocalRow={deleteLocalRow}
@@ -647,7 +647,7 @@ function MemberHubAppContent({ locale, setLocale }) {
               onChangeAvatar={() => setAvatarModalOpen(true)}
             />
           ) : null}
-          {!loading && !data ? <EmptyState t={t} /> : null}
+          {!data ? <EmptyState t={t} /> : null}
         </main>
       </section>
 
@@ -2312,10 +2312,6 @@ function ThemeToggle({ setTheme, t, theme }) {
       {theme === "dark" ? <Sun size={17} /> : <Moon size={17} />}
     </button>
   );
-}
-
-function LoadingState({ t }) {
-  return <div className="mh-empty loading"><Loader2 className="mh-spin" size={18} />{t("common.loading")}</div>;
 }
 
 function AppBootSkeleton({ t }) {
