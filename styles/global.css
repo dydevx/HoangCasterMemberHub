@@ -639,113 +639,75 @@ code {
   }
 }
 
-/* Stable app-shell skeleton used only during the initial authenticated bootstrap. */
+/* Minimal initial bootstrap: branded progress without a fake dashboard shell. */
 .mh-boot {
-  background: var(--mh-bg);
+  align-items: center;
+  background:
+    radial-gradient(circle at 50% 42%, color-mix(in srgb, var(--mh-brand) 7%, transparent), transparent 28%),
+    var(--mh-bg);
   color: var(--mh-text);
-  display: grid;
-  grid-template-columns: 280px minmax(0, 1fr);
+  display: flex;
+  justify-content: center;
   min-height: 100dvh;
+  padding: 2rem;
 }
 
-.mh-boot-sidebar {
-  background: linear-gradient(180deg, #1d4ed8, #0f172a);
-  padding: 1.2rem;
-}
-
-.mh-boot-brand,
-.mh-boot-topbar {
+.mh-boot-center {
   align-items: center;
   display: flex;
-  gap: 0.8rem;
+  flex-direction: column;
+  width: min(280px, 78vw);
 }
 
-.mh-boot-nav {
-  display: grid;
-  gap: 0.65rem;
-  margin-top: 2rem;
+.mh-boot-identity {
+  align-items: center;
+  display: flex;
+  font-size: 1rem;
+  font-weight: 750;
+  gap: 0.7rem;
+  letter-spacing: -0.015em;
 }
 
-.mh-boot-workspace {
-  min-width: 0;
-  position: relative;
+.mh-boot-identity .mh-mark {
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--mh-brand) 18%, transparent);
 }
 
-.mh-boot-topbar {
-  background: var(--mh-panel);
-  border-bottom: 1px solid var(--mh-line);
-  justify-content: space-between;
-  min-height: 94px;
-  padding: 1rem clamp(1rem, 3vw, 2rem);
+.mh-boot-progress {
+  background: color-mix(in srgb, var(--mh-line) 82%, transparent);
+  border-radius: 999px;
+  height: 3px;
+  margin-top: 1.25rem;
+  overflow: hidden;
+  width: 100%;
 }
 
-.mh-boot-topbar > div {
-  display: grid;
-  gap: 0.55rem;
-}
-
-.mh-boot-content {
-  display: grid;
-  gap: 1.25rem;
-  padding: clamp(1rem, 3vw, 2rem);
-}
-
-.mh-boot-stats {
-  display: grid;
-  gap: 1rem;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-}
-
-.mh-boot-block {
-  animation: mh-skeleton-shift 1.35s ease-in-out infinite;
-  background: linear-gradient(100deg, var(--mh-panel-soft) 25%, color-mix(in srgb, var(--mh-brand) 10%, var(--mh-panel)) 45%, var(--mh-panel-soft) 65%);
-  background-size: 220% 100%;
-  border-radius: 8px;
+.mh-boot-progress span {
+  animation: mh-boot-progress 1.15s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+  background: var(--mh-brand);
+  border-radius: inherit;
   display: block;
+  height: 100%;
+  transform: translateX(-110%);
+  width: 46%;
 }
 
-.mh-boot-sidebar .mh-boot-block {
-  background: rgba(255, 255, 255, 0.16);
-}
-
-.mh-boot-block.square { height: 42px; width: 42px; }
-.mh-boot-block.brand-line { height: 18px; width: 132px; }
-.mh-boot-block.nav-line { height: 42px; width: 100%; }
-.mh-boot-block.breadcrumb-line { height: 10px; width: 150px; }
-.mh-boot-block.title-line { height: 25px; width: 220px; }
-.mh-boot-block.account-line { height: 42px; width: min(320px, 30vw); }
-.mh-boot-block.stat-block { height: 112px; }
-.mh-boot-block.content-block { height: min(420px, 52vh); }
-
-.mh-boot-status {
-  bottom: 1.2rem;
+.mh-boot-center p {
   color: var(--mh-muted);
-  font-size: 0.875rem;
-  left: 50%;
-  margin: 0;
-  position: absolute;
-  transform: translateX(-50%);
+  font-size: 0.82rem;
+  margin: 0.7rem 0 0;
 }
 
-@keyframes mh-skeleton-shift {
-  0% { background-position: 100% 0; }
-  100% { background-position: -100% 0; }
-}
-
-@media (max-width: 900px) {
-  .mh-boot { grid-template-columns: 1fr; }
-  .mh-boot-sidebar { min-height: 92px; }
-  .mh-boot-nav { display: none; }
-}
-
-@media (max-width: 640px) {
-  .mh-boot-topbar { align-items: flex-start; }
-  .mh-boot-block.account-line { width: 72px; }
-  .mh-boot-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@keyframes mh-boot-progress {
+  0% { transform: translateX(-110%); }
+  65%, 100% { transform: translateX(240%); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .mh-boot-block { animation: none; }
+  .mh-boot-progress span {
+    animation: none;
+    transform: none;
+    width: 62%;
+  }
 }
 
 /* MemberHub app */

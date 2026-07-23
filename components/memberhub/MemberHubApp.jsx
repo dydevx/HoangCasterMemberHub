@@ -2321,30 +2321,13 @@ function LoadingState({ t }) {
 function AppBootSkeleton({ t }) {
   return (
     <main className="mh-boot" aria-busy="true" aria-live="polite">
-      <aside className="mh-boot-sidebar" aria-hidden="true">
-        <div className="mh-boot-brand">
-          <span className="mh-boot-block square" />
-          <span className="mh-boot-block brand-line" />
+      <section className="mh-boot-center">
+        <div className="mh-boot-identity" aria-hidden="true">
+          <LogoMark />
+          <span>{t("app.name")}</span>
         </div>
-        <div className="mh-boot-nav">
-          {[0, 1, 2, 3, 4].map((item) => <span className="mh-boot-block nav-line" key={item} />)}
-        </div>
-      </aside>
-      <section className="mh-boot-workspace">
-        <header className="mh-boot-topbar">
-          <div>
-            <span className="mh-boot-block breadcrumb-line" />
-            <span className="mh-boot-block title-line" />
-          </div>
-          <span className="mh-boot-block account-line" />
-        </header>
-        <div className="mh-boot-content" aria-hidden="true">
-          <div className="mh-boot-stats">
-            {[0, 1, 2, 3].map((item) => <span className="mh-boot-block stat-block" key={item} />)}
-          </div>
-          <span className="mh-boot-block content-block" />
-        </div>
-        <p className="mh-boot-status" role="status">{t("common.loading")}</p>
+        <div className="mh-boot-progress" aria-hidden="true"><span /></div>
+        <p role="status">{t("common.loading")}</p>
       </section>
     </main>
   );
