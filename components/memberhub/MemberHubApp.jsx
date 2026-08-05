@@ -1216,15 +1216,15 @@ function ResourceTable({ addLocalRow, canWrite = false, data, deleteLocalRow, to
   );
 }
 
-function useCloseOnEscape(onClose) {
+function useCloseOnEscape(onClose, enabled = true) {
   useEffect(() => {
     function handleKeyDown(event) {
-      if (event.key === "Escape") onClose();
+      if (enabled && event.key === "Escape") onClose();
     }
 
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
+  }, [enabled, onClose]);
 }
 
 function closeOnBackdropClick(onClose) {
@@ -1234,7 +1234,6 @@ function closeOnBackdropClick(onClose) {
 }
 
 function ShopFormModal({ data, mode, row, title, onClose, onSave, t }) {
-  useCloseOnEscape(onClose);
   const owners = ownerCandidates(data, row);
   const [ownerMode, setOwnerMode] = useState(row?.owner_id ? "existing" : "new");
   const initialStartDate = normalizeInputDate(row?.subscription_start_date);
@@ -1244,6 +1243,7 @@ function ShopFormModal({ data, mode, row, title, onClose, onSave, t }) {
   const [endDate, setEndDate] = useState(initialEndDate);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  useCloseOnEscape(onClose, !saving);
 
   function changeStartDate(value) {
     const nextStart = normalizeInputDate(value, startDate);
@@ -1314,11 +1314,11 @@ function ShopFormModal({ data, mode, row, title, onClose, onSave, t }) {
   }
 
   return (
-    <div className="mh-modal-backdrop" role="presentation" onClick={closeOnBackdropClick(onClose)}>
+    <div className="mh-modal-backdrop" role="presentation">
       <section className="mh-modal mh-wide-modal" role="dialog" aria-modal="true">
         <header>
           <h2>{title || (mode === "edit" ? t("shop.editShop") : t("shop.addShop"))}</h2>
-          <button type="button" onClick={onClose} title={t("common.cancel")}><X size={18} /></button>
+          <button type="button" onClick={onClose} disabled={saving} title={t("common.cancel")}><X size={18} /></button>
         </header>
         <form className="mh-form" onSubmit={submit}>
           <fieldset className="mh-form-section">
