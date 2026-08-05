@@ -1962,6 +1962,8 @@ function ModalField({ field, row }) {
         name={field.key}
         placeholder={field.placeholder || field.label}
         defaultValue={field.type === "password" ? "" : value}
+        min={field.min}
+        step={field.step}
         required={field.required || false}
         type={field.type || "text"}
       />
@@ -2006,6 +2008,11 @@ function CustomerServices({ addLocalRow, data, t }) {
     const form = new FormData(event.currentTarget);
     const customer = (data.customers || []).find((item) => Number(item.shop_id) === Number(selected.shop_id));
     if (!customer) return setError(t("request.customerMissing"));
+    const preferredDate = String(form.get("preferred_date") || "");
+    const preferredTime = String(form.get("preferred_time") || "");
+    const preferredAt = preferredDate && preferredTime
+      ? new Date(`${preferredDate}T${preferredTime}:00`).toISOString()
+      : null;
     try {
       setSaving(true);
       setError("");
@@ -2013,7 +2020,7 @@ function CustomerServices({ addLocalRow, data, t }) {
         shop_id: selected.shop_id,
         customer_id: customer.id,
         service_id: selected.id,
-        preferred_at: form.get("preferred_at") || null,
+        preferred_at: preferredAt,
         note: form.get("note") || ""
       });
       setSelected(null);
@@ -2047,7 +2054,10 @@ function CustomerServices({ addLocalRow, data, t }) {
             <header><h2 id="service-request-title">{t("request.title")}</h2><button type="button" disabled={saving} onClick={() => setSelected(null)}><X size={18} /></button></header>
             <form className="mh-form" onSubmit={submit}>
               <div className="mh-request-summary"><strong>{selected.name}</strong><span>{selected.shop_name} · {money(selected.price)} · {selected.duration_minutes || 0} {t("common.minutes")}</span></div>
-              <label>{t("request.preferredAt")}<input name="preferred_at" type="datetime-local" required /></label>
+              <div className="mh-form-row">
+                <label>{t("request.preferredDate")}<input name="preferred_date" type="date" min={todayInputDate()} required /></label>
+                <label>{t("request.preferredTime")}<input name="preferred_time" type="time" required /></label>
+              </div>
               <label>{t("transaction.note")}<textarea name="note" rows={3} /></label>
               {error ? <div className="mh-alert">{error}</div> : null}
               <div className="mh-modal-actions"><button className="mh-tool-button" type="button" disabled={saving} onClick={() => setSelected(null)}>{t("common.cancel")}</button><button className="mh-primary" type="submit" disabled={saving}>{saving ? t("common.loading") : t("request.send")}</button></div>
@@ -2614,7 +2624,7 @@ function getColumns(view, t, data = {}) {
 
 function getEditableFields(view, t, data = {}) {
   const idLabel = (label) => `${label} ${t("common.identifier")}`;
-  const shopOptions = optionList(data.shops, "id", (item) => `${item.name} #${item.id}`);
+  const shopOptions = optionList(data.shops, "id", (item) => item.name);
   const ownerOptions = optionList(
     (data.users || []).filter((user) => normalizeRole(user.role) !== "customer"),
     "id",
@@ -2719,7 +2729,7 @@ function getEditableFields(view, t, data = {}) {
       { key: "shop_id", label: t("shop.name"), type: "number", options: shopOptions },
       { key: "name", label: t("service.name") },
       { key: "price", label: t("service.price"), type: "number" },
-      { key: "duration_minutes", label: t("service.duration"), type: "number" },
+      { key: "duration_minutes", label: t("service.duration"), type: "number", min: "1", step: "1", defaultValue: "30", placeholder: t("service.durationExample") },
       { key: "description", label: t("service.description"), multiline: true },
       { key: "status", label: t("common.status"), defaultValue: "active", options: statusOptions.activeInactive }
     ],
