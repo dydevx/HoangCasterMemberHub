@@ -2026,7 +2026,10 @@ function CustomerServices({ addLocalRow, data, t }) {
       });
       setSelected(null);
     } catch (requestError) {
-      setError(requestError.message || t("common.actionFailed"));
+      const message = String(requestError.message || "");
+      setError(message.includes("service_requests") && message.includes("schema cache")
+        ? t("request.temporarilyUnavailable")
+        : message || t("common.actionFailed"));
     } finally {
       setSaving(false);
     }
