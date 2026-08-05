@@ -887,6 +887,7 @@ function Overview({ data, t, user }) {
 
 function CustomersWorkspace({ addLocalRow, data, deleteLocalRow, t, toggleLockRow, updateLocalRow }) {
   const [tab, setTab] = useState("list");
+  const [customerCreateRequest, setCustomerCreateRequest] = useState(0);
   const tabs = [
     ["list", "customers.list", UserRound],
     ["levels", "customers.levels", Sparkles],
@@ -897,7 +898,10 @@ function CustomersWorkspace({ addLocalRow, data, deleteLocalRow, t, toggleLockRo
   return (
     <div className="mh-resource">
       <div className="mh-quick-actions">
-        <button className="mh-primary slim" type="button" onClick={() => setTab("list")}>
+        <button className="mh-primary slim" type="button" onClick={() => {
+          setTab("list");
+          setCustomerCreateRequest((request) => request + 1);
+        }}>
           <Plus size={17} />
           {t("customers.addCustomer")}
         </button>
@@ -926,6 +930,7 @@ function CustomersWorkspace({ addLocalRow, data, deleteLocalRow, t, toggleLockRo
           columns={getColumns("customers", t, data)}
           data={data}
           deleteLocalRow={deleteLocalRow}
+          openAddRequest={customerCreateRequest}
           rows={data.customers}
           t={t}
           toggleLockRow={toggleLockRow}
@@ -995,7 +1000,7 @@ function Reports({ data, t }) {
   );
 }
 
-function ResourceTable({ addLocalRow, canWrite = false, data, deleteLocalRow, toggleLockRow, updateLocalRow, collection, columns, compact = false, rows, t, view }) {
+function ResourceTable({ addLocalRow, canWrite = false, data, deleteLocalRow, toggleLockRow, updateLocalRow, collection, columns, compact = false, openAddRequest = 0, rows, t, view }) {
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [status, setStatus] = useState("all");
@@ -1033,6 +1038,12 @@ function ResourceTable({ addLocalRow, canWrite = false, data, deleteLocalRow, to
   const visible = filtered.slice((page - 1) * pageSize, page * pageSize);
 
   useEffect(() => setPage(1), [debouncedQuery, status, view]);
+
+  useEffect(() => {
+    if (!openAddRequest) return;
+    setEditingRow(null);
+    setModalMode("add");
+  }, [openAddRequest]);
 
   return (
     <div className={`mh-resource ${compact ? "compact" : ""}`}>
