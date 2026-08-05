@@ -1,5 +1,5 @@
 import { hashPassword, requireMemberUser } from "@/lib/memberhub/auth";
-import { isCustomer, isStoreOwner, isSuperAdmin, normalizeRole } from "@/lib/memberhub/access";
+import { isCustomer, isStoreOwner, isSuperAdmin, normalizeRole, toLegacyRole } from "@/lib/memberhub/access";
 import { slugify } from "@/lib/memberhub/slug";
 import { createSupabaseServerClient } from "@/lib/supabaseServer";
 import crypto from "node:crypto";
@@ -362,7 +362,10 @@ function prepareUserPayload(body, payload, mode) {
   }
 
   if (nextPayload.role) {
-    nextPayload.role = normalizeRole(nextPayload.role);
+    // member_users still uses the original database constraint:
+    // admin | owner | customer. Keep canonical roles inside the app, but
+    // translate them at this persistence boundary for deployed schemas.
+    nextPayload.role = toLegacyRole(nextPayload.role);
   }
 
   if (password) {
@@ -641,7 +644,7 @@ async function writeResource(request, params, mode) {
             name: String(body.owner_name || payload.name || ownerEmail).trim(),
             email: ownerEmail,
             phone: String(body.owner_phone || payload.phone || "").trim() || null,
-            role: "store_owner",
+            role: "owner",
             status: String(body.owner_status || "active").trim() || "active",
             ...hashPassword(ownerPassword)
           })
@@ -801,7 +804,7 @@ async function writeResource(request, params, mode) {
   if (collection === "storeUsers") {
     await supabase
       .from("member_users")
-      .update({ role: "store_owner" })
+      .update({ role: "owner" })
       .eq("id", data.user_id);
 
     const { data: shop } = await supabase
@@ -821,7 +824,7 @@ async function writeResource(request, params, mode) {
   if (collection === "shops" && data.owner_id) {
     await supabase
       .from("member_users")
-      .update({ role: "store_owner" })
+      .update({ role: "owner" })
       .eq("id", data.owner_id);
 
     await supabase
