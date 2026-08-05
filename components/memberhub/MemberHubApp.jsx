@@ -34,7 +34,8 @@ import {
   UserRound,
   X
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import QRCode from "qrcode";
 import { useRouter } from "next/navigation";
 import { createTranslator as createNextIntlTranslator, NextIntlClientProvider } from "next-intl";
 import { dashboardPathFor, isCustomer, isStoreOwner, isSuperAdmin, normalizeRole } from "@/lib/memberhub/access";
@@ -1984,7 +1985,7 @@ function CustomerCards({ cards, t }) {
           </div>
           <h2>{card.card_number}</h2>
           <div className="mh-qr-wrap">
-            <img alt={t("card.qr")} src={qrUrl(card.qr_payload || card.card_number)} />
+            <QrImage alt={t("card.qr")} value={card.qr_payload || card.secure_token || card.card_number} />
             <div>
               <strong>{Number(card.points || 0).toLocaleString("vi-VN")} {t("common.points")}</strong>
               <p>{t("card.spend")}: {money(card.total_spend)}</p>
@@ -2086,28 +2087,93 @@ function ServiceRequests({ data, isOwner, t, updateLocalRow }) {
 function ScanView({ addLocalRow, data, t }) {
   const cards = data.cards || [];
   const [code, setCode] = useState(cards[0]?.card_number || "");
+  const [scanning, setScanning] = useState(false);
+  const [cameraMessage, setCameraMessage] = useState("");
+  const scannerRef = useRef(null);
+  const lastScanRef = useRef({ value: "", at: 0 });
   const card = cards.find((item) => {
-    const needle = code.trim().toLowerCase();
-    return [item.card_number, item.secure_token, item.qr_payload].filter(Boolean).some((value) => String(value).toLowerCase().includes(needle));
+    const raw = code.trim().toLowerCase();
+    if (!raw) return false;
+    let pathname = "";
+    try { pathname = new URL(raw).pathname.toLowerCase(); } catch {}
+    const token = (pathname || raw).split("/").filter(Boolean).at(-1) || "";
+    const needles = [raw, pathname, token].filter(Boolean);
+    return [item.card_number, item.secure_token, item.qr_payload]
+      .filter(Boolean)
+      .some((value) => needles.some((needle) => String(value).toLowerCase().includes(needle)));
   });
+
+  async function stopScanner() {
+    const scanner = scannerRef.current;
+    scannerRef.current = null;
+    if (scanner) {
+      try { if (scanner.isScanning) await scanner.stop(); } catch {}
+      try { await scanner.clear(); } catch {}
+    }
+    setScanning(false);
+  }
+
+  async function startScanner() {
+    if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+      setCameraMessage(t("scan.httpsRequired"));
+      return;
+    }
+    try {
+      setCameraMessage("");
+      const { Html5Qrcode } = await import("html5-qrcode");
+      await stopScanner();
+      const scanner = new Html5Qrcode("mh-camera-reader", { verbose: false });
+      scannerRef.current = scanner;
+      setScanning(true);
+      await scanner.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: { width: 240, height: 240 } },
+        async (decodedText) => {
+          const now = Date.now();
+          if (lastScanRef.current.value === decodedText && now - lastScanRef.current.at < 2500) return;
+          lastScanRef.current = { value: decodedText, at: now };
+          setCode(decodedText);
+          setCameraMessage(t("scan.detected"));
+          await stopScanner();
+        },
+        () => {}
+      );
+    } catch (error) {
+      await stopScanner();
+      setCameraMessage(error?.name === "NotAllowedError" ? t("scan.permissionDenied") : t("scan.cameraFailed"));
+    }
+  }
+
+  useEffect(() => () => {
+    const scanner = scannerRef.current;
+    scannerRef.current = null;
+    if (scanner?.isScanning) scanner.stop().then(() => scanner.clear()).catch(() => {});
+  }, []);
 
   return (
     <div className="mh-grid two">
       <section className="mh-card">
         <PanelTitle icon={QrCode} title={t("scan.title")} />
+        <div className="mh-camera-actions">
+          <button className="mh-primary slim" type="button" onClick={scanning ? stopScanner : startScanner}>
+            <Camera size={17} />{scanning ? t("scan.stopCamera") : t("scan.openCamera")}
+          </button>
+        </div>
+        <div id="mh-camera-reader" className={`mh-camera-reader ${scanning ? "active" : ""}`} />
+        {cameraMessage ? <div className="mh-camera-message" role="status">{cameraMessage}</div> : null}
         <label className="mh-scan-input">
           <ScanLine size={20} />
           <input value={code} placeholder={t("scan.placeholder")} onChange={(event) => setCode(event.target.value)} />
         </label>
-        <div className="mh-scan-window">
+        {!scanning ? <div className="mh-scan-window">
           <QrCode size={88} />
-        </div>
+        </div> : null}
       </section>
       <section className="mh-card">
         <PanelTitle icon={UserRound} title={t("scan.result")} />
         {card ? (
           <div className="mh-scan-result">
-            <img alt={t("card.qr")} src={qrUrl(card.qr_payload || card.secure_token || card.card_number)} />
+            <QrImage alt={t("card.qr")} value={card.qr_payload || card.secure_token || card.card_number} />
             <h2>{card.customer_name}</h2>
             <p>{card.shop_name}</p>
             <strong>{card.tier} - {Number(card.points || 0).toLocaleString("vi-VN")} {t("common.points")}</strong>
@@ -2844,8 +2910,25 @@ function csvCell(value) {
   return `"${String(value ?? "").replaceAll('"', '""')}"`;
 }
 
-function qrUrl(value) {
-  return `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(value)}`;
+function qrContent(value) {
+  const text = String(value || "");
+  if (!text.startsWith("/")) return text;
+  if (typeof window === "undefined") return text;
+  return `${window.location.origin}${withBasePath(text)}`;
+}
+
+function QrImage({ alt, value }) {
+  const [src, setSrc] = useState("");
+  useEffect(() => {
+    let active = true;
+    QRCode.toDataURL(qrContent(value), {
+      errorCorrectionLevel: "M",
+      margin: 1,
+      width: 220
+    }).then((url) => { if (active) setSrc(url); }).catch(() => { if (active) setSrc(""); });
+    return () => { active = false; };
+  }, [value]);
+  return src ? <img alt={alt} src={src} /> : <div className="mh-qr-placeholder" aria-label={alt}><QrCode size={56} /></div>;
 }
 
 function rankBy(rows, labelKey, valueKey) {
