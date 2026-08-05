@@ -107,6 +107,7 @@ function emptyRawData(overrides = {}) {
     users: [],
     customers: [],
     services: [],
+    serviceRequests: [],
     levels: [],
     cards: [],
     transactions: [],
@@ -139,9 +140,10 @@ async function readStoreOwnerData(supabase, user) {
     readWhereIn(supabase, "shops", "id", shopIds),
     readOptionalWhereIn(supabase, "store_users", "store_id", shopIds)
   ]);
-  const [customers, services, levels, cards, transactions, promotions, activityLogs, notifications, settings, languages] = await Promise.all([
+  const [customers, services, serviceRequests, levels, cards, transactions, promotions, activityLogs, notifications, settings, languages] = await Promise.all([
     readWhereIn(supabase, "customers", "shop_id", shopIds),
     readWhereIn(supabase, "services", "shop_id", shopIds),
+    readOptionalWhereIn(supabase, "service_requests", "shop_id", shopIds),
     readOptionalWhereIn(supabase, "membership_levels", "shop_id", shopIds),
     readWhereIn(supabase, "membership_cards", "shop_id", shopIds),
     readWhereIn(supabase, "transactions", "shop_id", shopIds),
@@ -165,6 +167,7 @@ async function readStoreOwnerData(supabase, user) {
     users,
     customers,
     services,
+    serviceRequests,
     levels,
     cards,
     transactions,
@@ -183,9 +186,10 @@ async function readCustomerData(supabase, user) {
 
   if (!customerIds.length || !shopIds.length) return emptyRawData({ users: [user] });
 
-  const [shops, services, levels, cards, transactions, promotions, notifications, languages] = await Promise.all([
+  const [shops, services, serviceRequests, levels, cards, transactions, promotions, notifications, languages] = await Promise.all([
     readWhereIn(supabase, "shops", "id", shopIds),
     readWhereIn(supabase, "services", "shop_id", shopIds),
+    readOptionalWhereIn(supabase, "service_requests", "customer_id", customerIds),
     readOptionalWhereIn(supabase, "membership_levels", "shop_id", shopIds),
     readWhereIn(supabase, "membership_cards", "customer_id", customerIds),
     readWhereIn(supabase, "transactions", "customer_id", customerIds),
@@ -199,6 +203,7 @@ async function readCustomerData(supabase, user) {
     users: [user],
     customers,
     services,
+    serviceRequests,
     levels,
     cards,
     transactions,
@@ -229,6 +234,7 @@ function scopedData(user, data) {
       users: data.users.filter((item) => item.id === user.id || data.storeUsers.some((storeUser) => ownedShopIds.has(storeUser.store_id) && storeUser.user_id === item.id)),
       customers: data.customers.filter((item) => ownedShopIds.has(item.shop_id)),
       services: data.services.filter((item) => ownedShopIds.has(item.shop_id)),
+      serviceRequests: data.serviceRequests.filter((item) => ownedShopIds.has(item.shop_id)),
       levels: data.levels.filter((item) => ownedShopIds.has(item.shop_id)),
       cards: data.cards.filter((item) => ownedShopIds.has(item.shop_id)),
       transactions: data.transactions.filter((item) => ownedShopIds.has(item.shop_id)),
@@ -251,6 +257,7 @@ function scopedData(user, data) {
     users: [user],
     customers: data.customers.filter((customer) => customerIds.has(customer.id)),
     services: data.services.filter((service) => shopIds.has(service.shop_id)),
+    serviceRequests: data.serviceRequests.filter((request) => customerIds.has(request.customer_id)),
     levels: data.levels.filter((level) => shopIds.has(level.shop_id)),
     cards: data.cards.filter((card) => customerIds.has(card.customer_id)),
     transactions: data.transactions.filter((transaction) => customerIds.has(transaction.customer_id)),
@@ -312,6 +319,12 @@ function shapeData(data) {
       ...service,
       shop_name: shopMap.get(service.shop_id)?.name || ""
     })),
+    serviceRequests: (data.serviceRequests || []).map((request) => ({
+      ...request,
+      shop_name: shopMap.get(request.shop_id)?.name || "",
+      customer_name: customerMap.get(request.customer_id)?.name || "",
+      service_name: serviceMap.get(request.service_id)?.name || ""
+    })),
     levels: (data.levels || []).map((level) => ({
       ...level,
       shop_name: shopMap.get(level.shop_id)?.name || ""
@@ -360,12 +373,13 @@ export async function GET(request) {
       return NextResponse.json(withCurrentUser(auth.user, shapeData(await readCustomerData(supabase, auth.user))));
     }
 
-    const [shops, storeUsers, users, customers, services, levels, cards, transactions, promotions, activityLogs, notifications, settings, languages] = await Promise.all([
+    const [shops, storeUsers, users, customers, services, serviceRequests, levels, cards, transactions, promotions, activityLogs, notifications, settings, languages] = await Promise.all([
       readAll(supabase, "shops"),
       readOptional(supabase, "store_users"),
       readAllMemberUsers(supabase),
       readAll(supabase, "customers"),
       readAll(supabase, "services"),
+      readOptional(supabase, "service_requests"),
       readOptional(supabase, "membership_levels"),
       readAll(supabase, "membership_cards"),
       readAll(supabase, "transactions"),
@@ -382,6 +396,7 @@ export async function GET(request) {
       users,
       customers,
       services,
+      serviceRequests,
       levels,
       cards,
       transactions,

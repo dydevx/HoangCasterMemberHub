@@ -27,6 +27,11 @@ const resources = {
     fields: ["shop_id", "name", "price", "duration_minutes", "description", "image_url", "status"],
     needsShop: true
   },
+  serviceRequests: {
+    table: "service_requests",
+    fields: ["shop_id", "customer_id", "service_id", "preferred_at", "note", "status", "owner_note"],
+    needsShop: true
+  },
   levels: {
     table: "membership_levels",
     fields: ["shop_id", "name", "color", "icon", "min_points", "min_spend", "earn_rate", "discount_percent", "benefits", "sort_order", "status"],
@@ -173,10 +178,23 @@ async function assertCanWrite(supabase, user, config, payload, id) {
     "membership_cards",
     "transactions",
     "promotions",
-    "settings"
+    "settings",
+    "service_requests"
   ]);
 
   if (isCustomer(user)) {
+    if (config.table === "service_requests") {
+      if (id) return { error: "Khach hang khong the thay doi yeu cau da gui", status: 403 };
+      const { data: customer } = await supabase.from("customers").select("id,shop_id").eq("user_id", user.id).eq("id", payload.customer_id).maybeSingle();
+      const { data: service } = await supabase.from("services").select("id,shop_id,status").eq("id", payload.service_id).maybeSingle();
+      if (!customer || !service || customer.shop_id !== service.shop_id || service.status !== "active") {
+        return { error: "Dich vu khong thuoc cua hang cua khach hang", status: 403 };
+      }
+      payload.shop_id = customer.shop_id;
+      payload.status = "pending";
+      delete payload.owner_note;
+      return {};
+    }
     if (config.table === "customers" && id) {
       const { data, error } = await supabase
         .from(config.table)
@@ -672,6 +690,20 @@ async function writeResource(request, params, mode) {
     }
 
     payload.transaction_code = payload.transaction_code || `TX-${Date.now()}-${secureToken(5)}`.toUpperCase();
+  }
+
+  if (collection === "serviceRequests") {
+    if (mode === "post" && (!payload.customer_id || !payload.service_id)) {
+      return NextResponse.json({ error: "Thieu khach hang hoac dich vu" }, { status: 400 });
+    }
+    if (mode === "post") payload.status = "pending";
+    if (mode === "patch") {
+      delete payload.shop_id;
+      delete payload.customer_id;
+      delete payload.service_id;
+      delete payload.preferred_at;
+      delete payload.note;
+    }
   }
 
   const permission = await assertCanWrite(supabase, auth.user, config, payload, id);

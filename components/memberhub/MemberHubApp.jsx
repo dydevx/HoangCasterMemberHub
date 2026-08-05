@@ -59,6 +59,7 @@ const navItems = {
     ["overview", "nav.overview", LayoutDashboard],
     ["customers", "nav.customers", UserRound],
     ["services", "nav.services", Scissors],
+    ["requests", "nav.serviceRequests", ReceiptText],
     ["promotions", "nav.promotions", BadgePercent],
     ["reports", "nav.reports", FileText],
     ["notifications", "nav.notifications", Bell],
@@ -67,6 +68,7 @@ const navItems = {
   customer: [
     ["cards", "nav.cards", CreditCard],
     ["services", "nav.services", Scissors],
+    ["requests", "nav.serviceRequests", ReceiptText],
     ["transactions", "nav.transactions", ReceiptText],
     ["promotions", "nav.promotions", BadgePercent],
     ["notifications", "nav.notifications", Bell],
@@ -81,6 +83,7 @@ const tableMap = {
   users: "users",
   customers: "customers",
   services: "services",
+  requests: "serviceRequests",
   cards: "cards",
   levels: "levels",
   transactions: "transactions",
@@ -163,7 +166,12 @@ function statusLabel(t, value) {
     expired: t("common.expired"),
     suspended: t("common.suspended"),
     read: t("common.read"),
-    unread: t("common.unread")
+    unread: t("common.unread"),
+    pending: t("request.pending"),
+    confirmed: t("request.confirmed"),
+    rejected: t("request.rejected"),
+    completed: t("request.completed"),
+    cancelled: t("request.cancelled")
   }[value] || value || "-";
 }
 
@@ -734,6 +742,8 @@ function DashboardView({ addLocalRow, deleteLocalRow, toggleLockRow, updateLocal
   if (view === "reports") return <Reports data={data} t={t} />;
   if (view === "scan") return <ScanView addLocalRow={addLocalRow} data={data} t={t} />;
   if (view === "profile") return <Profile customers={data.customers} onChangeAvatar={onChangeAvatar} t={t} updateLocalRow={updateLocalRow} user={user} />;
+  if (view === "services" && isCustomer(user)) return <CustomerServices addLocalRow={addLocalRow} data={data} t={t} />;
+  if (view === "requests") return <ServiceRequests data={data} isOwner={isStoreOwner(user)} t={t} updateLocalRow={updateLocalRow} />;
   if (view === "customers" && isStoreOwner(user)) {
     return (
       <CustomersWorkspace
@@ -1985,6 +1995,84 @@ function CustomerCards({ cards, t }) {
   );
 }
 
+function CustomerServices({ addLocalRow, data, t }) {
+  const [selected, setSelected] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const services = (data.services || []).filter((item) => item.status === "active");
+
+  async function submit(event) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const customer = (data.customers || []).find((item) => Number(item.shop_id) === Number(selected.shop_id));
+    if (!customer) return setError(t("request.customerMissing"));
+    try {
+      setSaving(true);
+      setError("");
+      await addLocalRow("serviceRequests", {
+        shop_id: selected.shop_id,
+        customer_id: customer.id,
+        service_id: selected.id,
+        preferred_at: form.get("preferred_at") || null,
+        note: form.get("note") || ""
+      });
+      setSelected(null);
+    } catch (requestError) {
+      setError(requestError.message || t("common.actionFailed"));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="mh-resource">
+      <div className="mh-table-wrap">
+        <table className="mh-table">
+          <thead><tr><th>{t("service.name")}</th><th>{t("shop.name")}</th><th>{t("service.price")}</th><th>{t("service.duration")}</th><th>{t("common.actions")}</th></tr></thead>
+          <tbody>{services.map((service) => (
+            <tr key={service.id}>
+              <td data-label={t("service.name")}>{service.name}</td>
+              <td data-label={t("shop.name")}>{service.shop_name}</td>
+              <td data-label={t("service.price")}>{money(service.price)}</td>
+              <td data-label={t("service.duration")}>{service.duration_minutes || 0} {t("common.minutes")}</td>
+              <td><button className="mh-primary slim" type="button" onClick={() => { setError(""); setSelected(service); }}>{t("request.choose")}</button></td>
+            </tr>
+          ))}</tbody>
+        </table>
+        {!services.length ? <div className="mh-empty">{t("common.empty")}</div> : null}
+      </div>
+      {selected ? (
+        <div className="mh-modal-backdrop" role="presentation" onMouseDown={closeOnBackdropClick(() => !saving && setSelected(null))}>
+          <section className="mh-modal" role="dialog" aria-modal="true" aria-labelledby="service-request-title">
+            <header><h2 id="service-request-title">{t("request.title")}</h2><button type="button" disabled={saving} onClick={() => setSelected(null)}><X size={18} /></button></header>
+            <form className="mh-form" onSubmit={submit}>
+              <div className="mh-request-summary"><strong>{selected.name}</strong><span>{selected.shop_name} · {money(selected.price)} · {selected.duration_minutes || 0} {t("common.minutes")}</span></div>
+              <label>{t("request.preferredAt")}<input name="preferred_at" type="datetime-local" required /></label>
+              <label>{t("transaction.note")}<textarea name="note" rows={3} /></label>
+              {error ? <div className="mh-alert">{error}</div> : null}
+              <div className="mh-modal-actions"><button className="mh-tool-button" type="button" disabled={saving} onClick={() => setSelected(null)}>{t("common.cancel")}</button><button className="mh-primary" type="submit" disabled={saving}>{saving ? t("common.loading") : t("request.send")}</button></div>
+            </form>
+          </section>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function ServiceRequests({ data, isOwner, t, updateLocalRow }) {
+  const rows = data.serviceRequests || [];
+  async function decide(row, status) {
+    try { await updateLocalRow("serviceRequests", { id: row.id, status }); }
+    catch (error) { window.alert(error.message || t("common.actionFailed")); }
+  }
+  return (
+    <div className="mh-resource"><div className="mh-table-wrap"><table className="mh-table">
+      <thead><tr>{isOwner ? <th>{t("customer.name")}</th> : null}<th>{t("service.name")}</th><th>{t("shop.name")}</th><th>{t("request.preferredAt")}</th><th>{t("transaction.note")}</th><th>{t("common.status")}</th>{isOwner ? <th>{t("common.actions")}</th> : null}</tr></thead>
+      <tbody>{rows.map((row) => <tr key={row.id}>{isOwner ? <td>{row.customer_name}</td> : null}<td>{row.service_name}</td><td>{row.shop_name}</td><td>{row.preferred_at ? new Date(row.preferred_at).toLocaleString("vi-VN") : "-"}</td><td>{formatCell(row.note)}</td><td><StatusBadge t={t} value={row.status} /></td>{isOwner ? <td><div className="mh-action-group"><button className="mh-icon-action" disabled={row.status !== "pending"} title={t("request.confirm")} onClick={() => decide(row, "confirmed")}><Check size={16} /></button><button className="mh-icon-action danger" disabled={row.status !== "pending"} title={t("request.reject")} onClick={() => decide(row, "rejected")}><X size={16} /></button></div></td> : null}</tr>)}</tbody>
+    </table>{!rows.length ? <div className="mh-empty">{t("common.empty")}</div> : null}</div></div>
+  );
+}
+
 function ScanView({ addLocalRow, data, t }) {
   const cards = data.cards || [];
   const [code, setCode] = useState(cards[0]?.card_number || "");
@@ -2387,6 +2475,7 @@ function getViewTitleKey(view) {
     users: "nav.users",
     customers: "nav.customers",
     services: "nav.services",
+    requests: "nav.serviceRequests",
     cards: "nav.cards",
     levels: "nav.levels",
     transactions: "nav.transactions",

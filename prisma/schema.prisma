@@ -61,6 +61,7 @@ model Shop {
   levels      MembershipLevel[]
   pointHistories PointHistory[]
   subscriptionRenewals SubscriptionRenewal[]
+  serviceRequests ServiceRequest[]
 
   @@index([ownerId])
   @@index([status])
@@ -103,6 +104,7 @@ model Customer {
   cards     MembershipCard[]
   transactions Transaction[]
   pointHistories PointHistory[]
+  serviceRequests ServiceRequest[]
 
   @@unique([shopId, slug])
   @@unique([shopId, userId])
@@ -126,10 +128,32 @@ model Service {
   shop            Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
   transactions    Transaction[]
   promotions      Promotion[]
+  serviceRequests ServiceRequest[]
 
   @@index([shopId])
   @@index([status])
   @@map("services")
+}
+
+model ServiceRequest {
+  id          BigInt    @id @default(autoincrement())
+  shopId      Int       @map("shop_id")
+  customerId  Int       @map("customer_id")
+  serviceId   Int       @map("service_id")
+  preferredAt DateTime? @map("preferred_at") @db.Timestamptz(6)
+  note        String?
+  ownerNote   String?   @map("owner_note")
+  status      String    @default("pending")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+  shop        Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  customer    Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  service     Service   @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@index([shopId])
+  @@index([customerId])
+  @@index([status])
+  @@map("service_requests")
 }
 
 model MembershipCard {

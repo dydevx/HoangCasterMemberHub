@@ -1753,6 +1753,41 @@ code {
   color: var(--mh-muted);
 }
 
+.mh-status.pending {
+  background: rgba(184, 117, 3, 0.12);
+  border-color: rgba(184, 117, 3, 0.22);
+  color: var(--mh-warn);
+}
+
+.mh-status.confirmed,
+.mh-status.completed {
+  background: rgba(20, 133, 91, 0.12);
+  border-color: rgba(20, 133, 91, 0.22);
+  color: var(--mh-accent);
+}
+
+.mh-status.rejected,
+.mh-status.cancelled {
+  background: rgba(194, 65, 91, 0.12);
+  border-color: rgba(194, 65, 91, 0.22);
+  color: var(--mh-danger);
+}
+
+.mh-request-summary {
+  align-items: flex-start;
+  background: var(--mh-panel-soft);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.9rem 1rem;
+}
+
+.mh-request-summary span {
+  color: var(--mh-muted);
+  font-size: 0.9rem;
+}
+
 .mh-icon-action {
   background: var(--mh-panel-soft);
   border: 1px solid var(--mh-line);
