@@ -1,6 +1,7 @@
 import { hashPassword, requireMemberUser } from "@/lib/memberhub/auth";
 import { isCustomer, isStoreOwner, isSuperAdmin, normalizeRole, toLegacyRole } from "@/lib/memberhub/access";
 import { slugify } from "@/lib/memberhub/slug";
+import { normalizeSubscriptionPlan, subscriptionPlanLimits } from "@/lib/memberhub/subscriptionPlans";
 import { createSupabaseServerClient } from "@/lib/supabaseServer";
 import crypto from "node:crypto";
 import { NextResponse } from "next/server";
@@ -285,6 +286,41 @@ async function assertCanWrite(supabase, user, config, payload, id) {
     if (readonlyStatus === "expired" || readonlyStatus === "suspended") {
       return { error: "Cua hang da het han hoac dang bi khoa, chi duoc xem du lieu", status: 403 };
     }
+  }
+
+  return {};
+}
+
+async function assertPlanCapacity(supabase, collection, shopId) {
+  const resource = {
+    customers: { table: "customers", limitKey: "customerLimit", label: "khach hang" },
+    services: { table: "services", limitKey: "serviceLimit", label: "dich vu" },
+    promotions: { table: "promotions", limitKey: "promotionLimit", label: "khuyen mai" }
+  }[collection];
+
+  if (!resource || !shopId) return {};
+
+  const { data: shop, error: shopError } = await supabase
+    .from("shops")
+    .select("subscription_plan")
+    .eq("id", shopId)
+    .maybeSingle();
+  if (shopError || !shop) return { error: "Khong tim thay goi thue cua cua hang", status: 400 };
+
+  const plan = normalizeSubscriptionPlan(shop.subscription_plan);
+  const limit = subscriptionPlanLimits(plan)[resource.limitKey];
+  if (limit === null) return {};
+
+  const { count, error: countError } = await supabase
+    .from(resource.table)
+    .select("id", { count: "exact", head: true })
+    .eq("shop_id", shopId);
+  if (countError) return { error: countError.message, status: 400 };
+  if (Number(count || 0) >= limit) {
+    return {
+      error: `Goi ${plan} chi cho phep toi da ${limit} ${resource.label}. Vui long nang cap goi thue.`,
+      status: 403
+    };
   }
 
   return {};
@@ -768,6 +804,13 @@ async function writeResource(request, params, mode) {
     return NextResponse.json({ error: permission.error }, { status: permission.status });
   }
 
+  if (mode === "post") {
+    const capacity = await assertPlanCapacity(supabase, collection, payload.shop_id);
+    if (capacity.error) {
+      return NextResponse.json({ error: capacity.error }, { status: capacity.status });
+    }
+  }
+
   if (collection === "users") {
     if (!isSuperAdmin(auth.user)) {
       return NextResponse.json({ error: "Chi admin moi co quyen quan ly nguoi dung" }, { status: 403 });
@@ -891,17 +934,20 @@ async function writeResource(request, params, mode) {
       .limit(1)
       .maybeSingle();
 
-    await runMutation(supabase, resources.cards, "post", {
+    const { error: cardError } = await runMutation(supabase, resources.cards, "post", {
       customer_id: data.id,
       shop_id: data.shop_id,
       card_number: cardNumber,
       secure_token: token,
       qr_payload: publicMemberPath(token),
       points: 0,
-      tier: lowestLevel?.name || "Member",
+      tier: lowestLevel?.name || "Silver",
       total_spend: 0,
       status: "active"
     });
+    if (cardError) {
+      return NextResponse.json({ error: `Khong the tao the thanh vien: ${cardError.message}` }, { status: 400 });
+    }
   }
 
   if (collection === "storeUsers") {

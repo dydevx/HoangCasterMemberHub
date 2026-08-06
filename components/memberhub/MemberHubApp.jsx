@@ -41,6 +41,7 @@ import { createTranslator as createNextIntlTranslator, NextIntlClientProvider } 
 import { dashboardPathFor, isCustomer, isStoreOwner, isSuperAdmin, normalizeRole } from "@/lib/memberhub/access";
 import { getMessagesForLocale } from "@/lib/memberhub/i18n";
 import { normalizeRoutePath } from "@/lib/memberhub/slug";
+import { subscriptionPlanLimits } from "@/lib/memberhub/subscriptionPlans";
 import { createTranslator, locales } from "@/messages/memberhub";
 
 const appBasePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
@@ -156,6 +157,12 @@ function planLabel(t, value) {
     standard: t("subscription.standard"),
     premium: t("subscription.premium")
   }[value] || value || "-";
+}
+
+function planOptionLabel(t, value) {
+  const limits = subscriptionPlanLimits(value);
+  if (limits.customerLimit === null) return `${planLabel(t, value)} — ∞ KH / ∞ DV / ∞ KM`;
+  return `${planLabel(t, value)} — ${limits.customerLimit} KH / ${limits.serviceLimit} DV / ${limits.promotionLimit} KM`;
 }
 
 function statusLabel(t, value) {
@@ -1400,9 +1407,9 @@ function ShopFormModal({ data, mode, row, title, onClose, onSave, t }) {
             <legend>{t("subscription.section")}</legend>
             <label>{t("subscription.plan")}
               <select name="subscription_plan" defaultValue={row?.subscription_plan || "standard"}>
-                <option value="starter">{t("subscription.starter")}</option>
-                <option value="standard">{t("subscription.standard")}</option>
-                <option value="premium">{t("subscription.premium")}</option>
+                <option value="starter">{planOptionLabel(t, "starter")}</option>
+                <option value="standard">{planOptionLabel(t, "standard")}</option>
+                <option value="premium">{planOptionLabel(t, "premium")}</option>
               </select>
             </label>
             <label>{t("subscription.start")}<input name="subscription_start_date" type="date" value={startDate} required onChange={(event) => changeStartDate(event.target.value)} /></label>
@@ -1480,9 +1487,9 @@ function RenewShopModal({ row, onClose, onSave, t }) {
         <form className="mh-form" onSubmit={submit}>
           <label>{t("subscription.plan")}
             <select name="subscription_plan" defaultValue={row?.subscription_plan || "standard"}>
-              <option value="starter">{t("subscription.starter")}</option>
-              <option value="standard">{t("subscription.standard")}</option>
-              <option value="premium">{t("subscription.premium")}</option>
+              <option value="starter">{planOptionLabel(t, "starter")}</option>
+              <option value="standard">{planOptionLabel(t, "standard")}</option>
+              <option value="premium">{planOptionLabel(t, "premium")}</option>
             </select>
           </label>
           <label>{t("subscription.start")}<input type="date" value={startDate} required onChange={(event) => changeStartDate(event.target.value)} /></label>
@@ -2730,9 +2737,9 @@ function getEditableFields(view, t, data = {}) {
       { key: "owner_phone", label: t("owner.phone"), addOnly: true },
       { key: "owner_password", label: t("owner.tempPassword"), type: "password", addOnly: true, placeholder: "Owner@123" },
       { key: "subscription_plan", label: t("subscription.plan"), defaultValue: "standard", options: [
-        { value: "starter", label: t("subscription.starter") },
-        { value: "standard", label: t("subscription.standard") },
-        { value: "premium", label: t("subscription.premium") }
+        { value: "starter", label: planOptionLabel(t, "starter") },
+        { value: "standard", label: planOptionLabel(t, "standard") },
+        { value: "premium", label: planOptionLabel(t, "premium") }
       ] },
       { key: "subscription_start_date", label: t("subscription.start"), type: "date" },
       { key: "subscription_months", label: t("subscription.months"), type: "number", addOnly: true, defaultValue: "1", options: [
