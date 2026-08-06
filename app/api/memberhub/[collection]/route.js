@@ -914,6 +914,19 @@ async function writeResource(request, params, mode) {
       return NextResponse.json({ error: "Khong tim thay yeu cau dich vu" }, { status: 404 });
     }
     previousServiceRequest = previous;
+
+    if (payload.status && payload.status !== previous.status) {
+      const allowedTransitions = {
+        pending: new Set(["confirmed", "rejected", "cancelled"]),
+        confirmed: new Set(["completed", "cancelled"]),
+        rejected: new Set(),
+        completed: new Set(),
+        cancelled: new Set()
+      };
+      if (!allowedTransitions[previous.status]?.has(payload.status)) {
+        return NextResponse.json({ error: "Trang thai yeu cau khong the chuyen nhu vay" }, { status: 400 });
+      }
+    }
   }
 
   const { data, error } = await runMutation(supabase, config, mode, payload, id);
@@ -1012,7 +1025,7 @@ async function writeResource(request, params, mode) {
   }
 
 
-  if (collection === "serviceRequests" && mode === "patch" && data.status === "confirmed") {
+  if (collection === "serviceRequests" && mode === "patch" && data.status === "completed") {
     try {
       await createTransactionForServiceRequest(supabase, { ...previousServiceRequest, ...data });
     } catch (transactionError) {

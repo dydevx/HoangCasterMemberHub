@@ -769,7 +769,7 @@ function DashboardView({ addLocalRow, deleteLocalRow, toggleLockRow, updateLocal
   const rows = data[key] || [];
 
   if (view === "cards" && isCustomer(user)) {
-    return <CustomerCards cards={rows} t={t} />;
+    return <CustomerCards cards={rows} data={data} t={t} />;
   }
 
   return (
@@ -802,7 +802,12 @@ function Overview({ data, t, user }) {
     expiringShops,
     expiredShops,
     alerts,
-    currentShop
+    currentShop,
+    revenueToday,
+    revenueWeek,
+    revenueMonth,
+    pendingRequests,
+    upcomingRequests
   } = useMemo(() => {
     const transactions = data.transactions ?? [];
     const cards = data.cards ?? [];
@@ -829,8 +834,16 @@ function Overview({ data, t, user }) {
       .sort((left, right) => Number(left.computed_remaining_days ?? 9999) - Number(right.computed_remaining_days ?? 9999))
       .slice(0, 8);
     const currentShop = isStoreOwner(user) ? shopsWithSubscription[0] : null;
+    const revenueToday = sumRecent(transactions, 1);
+    const revenueWeek = sumRecent(transactions, 7);
+    const revenueMonth = sumRecent(transactions, 30);
+    const pendingRequests = (data.serviceRequests || []).filter((request) => request.status === "pending").length;
+    const upcomingRequests = (data.serviceRequests || [])
+      .filter((request) => request.status === "confirmed" && request.preferred_at && new Date(request.preferred_at).getTime() >= Date.now())
+      .sort((left, right) => new Date(left.preferred_at).getTime() - new Date(right.preferred_at).getTime())
+      .slice(0, 5);
 
-    return { transactions, customers, shops, revenue, points, newCustomers, topServices, activeShops, expiringShops, expiredShops, alerts, currentShop };
+    return { transactions, customers, shops, revenue, points, newCustomers, topServices, activeShops, expiringShops, expiredShops, alerts, currentShop, revenueToday, revenueWeek, revenueMonth, pendingRequests, upcomingRequests };
   }, [data, user]);
 
   return (
@@ -850,10 +863,10 @@ function Overview({ data, t, user }) {
           <>
             <Stat label={currentShop?.name || t("shop.name")} value={currentShop?.computed_remaining_days === null ? "-" : `${currentShop?.computed_remaining_days ?? "-"} ${t("common.days")}`} />
             <Stat label={t("dashboard.customers")} value={customers.length} />
-            <Stat label={t("dashboard.newCustomers")} value={newCustomers} />
-            <Stat label={t("dashboard.revenue")} value={money(revenue)} />
-            <Stat label={t("dashboard.transactions")} value={transactions.length} />
-            <Stat label={t("dashboard.points")} value={points.toLocaleString("vi-VN")} />
+            <Stat label={t("reports.daily")} value={money(revenueToday)} />
+            <Stat label={t("reports.weekly")} value={money(revenueWeek)} />
+            <Stat label={t("reports.monthly")} value={money(revenueMonth)} />
+            <Stat label={t("request.pending")} value={pendingRequests} />
           </>
         )}
       </div>
@@ -883,6 +896,28 @@ function Overview({ data, t, user }) {
         <div className="mh-alert">{t("dashboard.expiredNotice")}</div>
       ) : null}
 
+      {isStoreOwner(user) && currentShop ? (
+        <div className="mh-grid two mh-owner-operations">
+          <section className="mh-card">
+            <PanelTitle icon={CreditCard} title={`${t("subscription.plan")}: ${planLabel(t, currentShop.subscription_plan)}`} />
+            <PlanUsageRows currentShop={currentShop} customers={customers} data={data} t={t} />
+          </section>
+          <section className="mh-card">
+            <PanelTitle icon={ReceiptText} title={t("nav.serviceRequests")} />
+            <div className="mh-upcoming-list">
+              {upcomingRequests.map((request) => (
+                <div className="mh-upcoming-row" key={request.id}>
+                  <div><strong>{request.customer_name}</strong><span>{request.service_name}</span></div>
+                  <time>{new Date(request.preferred_at).toLocaleString("vi-VN")}</time>
+                  <StatusBadge t={t} value={request.status} />
+                </div>
+              ))}
+              {!upcomingRequests.length ? <div className="mh-empty">{t("common.empty")}</div> : null}
+            </div>
+          </section>
+        </div>
+      ) : null}
+
       <section className="mh-card mh-chart-card">
         <PanelTitle icon={FileText} title={t("dashboard.topServices")} />
         <BarChart rows={topServices} />
@@ -901,6 +936,23 @@ function Overview({ data, t, user }) {
       </section>
     </>
   );
+}
+
+function PlanUsageRows({ currentShop, customers, data, t }) {
+  const limits = subscriptionPlanLimits(currentShop.subscription_plan);
+  const rows = [
+    [t("dashboard.customers"), customers.length, limits.customerLimit],
+    [t("nav.services"), (data.services || []).length, limits.serviceLimit],
+    [t("nav.promotions"), (data.promotions || []).length, limits.promotionLimit]
+  ];
+
+  return <div className="mh-plan-usage">{rows.map(([label, value, limit]) => {
+    const progress = limit === null ? 0 : Math.min(100, Math.round((value / Math.max(1, limit)) * 100));
+    return <div className="mh-plan-usage-row" key={label}>
+      <div><span>{label}</span><strong>{value.toLocaleString("vi-VN")} / {limit === null ? "∞" : limit.toLocaleString("vi-VN")}</strong></div>
+      <div className={`mh-progress ${progress >= 80 ? "warning" : ""}`} role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow={limit === null ? 0 : progress}><div style={{ width: limit === null ? "0%" : `${progress}%` }} /></div>
+    </div>;
+  })}</div>;
 }
 
 function CustomersWorkspace({ addLocalRow, data, deleteLocalRow, t, toggleLockRow, updateLocalRow }) {
@@ -1979,28 +2031,61 @@ function ModalField({ field, row }) {
   );
 }
 
-function CustomerCards({ cards, t }) {
+function CustomerCards({ cards, data, t }) {
   if (!cards.length) return <div className="mh-empty">{t("common.empty")}</div>;
 
   return (
-    <div className="mh-card-grid">
-      {cards.map((card) => (
-        <article className="mh-member-card" key={card.id}>
-          <div className="mh-member-card-head">
-            <span>{card.shop_name}</span>
-            <em>{card.tier}</em>
-          </div>
-          <h2>{card.card_number}</h2>
-          <div className="mh-qr-wrap">
-            <QrImage alt={t("card.qr")} value={card.qr_payload || card.secure_token || card.card_number} />
-            <div>
-              <strong>{Number(card.points || 0).toLocaleString("vi-VN")} {t("common.points")}</strong>
-              <p>{t("card.spend")}: {money(card.total_spend)}</p>
-              <p>{t("card.expires")}: {dateText(card.expires_at)}</p>
+    <div className="mh-customer-card-page">
+      <div className="mh-card-grid">
+        {cards.map((card) => {
+          const levels = (data.levels || [])
+            .filter((level) => Number(level.shop_id) === Number(card.shop_id) && level.status === "active")
+            .sort((left, right) => Number(left.min_points || 0) - Number(right.min_points || 0));
+          const nextLevel = levels.find((level) => Number(level.min_points || 0) > Number(card.points || 0));
+          const progress = nextLevel
+            ? Math.min(100, Math.round((Number(card.points || 0) / Math.max(1, Number(nextLevel.min_points || 0))) * 100))
+            : 100;
+          return (
+            <article className="mh-member-card" key={card.id}>
+              <div className="mh-member-card-head">
+                <span>{card.shop_name}</span>
+                <em>{card.tier}</em>
+              </div>
+              <div className="mh-member-card-identity">
+                <small>{card.customer_name}</small>
+                <h2>{card.card_number}</h2>
+              </div>
+              <div className="mh-qr-wrap">
+                <QrImage alt={t("card.qr")} value={card.qr_payload || card.secure_token || card.card_number} />
+                <div>
+                  <strong>{Number(card.points || 0).toLocaleString("vi-VN")} {t("common.points")}</strong>
+                  <p>{t("card.spend")}: {money(card.total_spend)}</p>
+                  <p>{t("card.expires")}: {dateText(card.expires_at)}</p>
+                  <p>{t("common.status")}: {statusLabel(t, card.status)}</p>
+                </div>
+              </div>
+              <div className="mh-tier-progress">
+                <div><span>{card.tier}</span><strong>{nextLevel ? nextLevel.name : "MAX"}</strong></div>
+                <div className="mh-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow={progress}><div style={{ width: `${progress}%` }} /></div>
+                <small>{nextLevel ? `${Number(nextLevel.min_points || 0) - Number(card.points || 0)} ${t("common.points")}` : t("request.completed")}</small>
+              </div>
+            </article>
+          );
+        })}
+      </div>
+      <section className="mh-card">
+        <PanelTitle icon={ReceiptText} title={t("nav.serviceRequests")} />
+        <div className="mh-upcoming-list">
+          {(data.serviceRequests || []).filter((request) => ["pending", "confirmed"].includes(request.status)).slice(0, 5).map((request) => (
+            <div className="mh-upcoming-row" key={request.id}>
+              <div><strong>{request.service_name}</strong><span>{request.shop_name}</span></div>
+              <time>{request.preferred_at ? new Date(request.preferred_at).toLocaleString("vi-VN") : "-"}</time>
+              <StatusBadge t={t} value={request.status} />
             </div>
-          </div>
-        </article>
-      ))}
+          ))}
+          {!(data.serviceRequests || []).some((request) => ["pending", "confirmed"].includes(request.status)) ? <div className="mh-empty">{t("common.empty")}</div> : null}
+        </div>
+      </section>
     </div>
   );
 }
@@ -2089,7 +2174,7 @@ function ServiceRequests({ data, isOwner, t, updateLocalRow }) {
   return (
     <div className="mh-resource"><div className="mh-table-wrap"><table className="mh-table">
       <thead><tr>{isOwner ? <th>{t("customer.name")}</th> : null}<th>{t("service.name")}</th><th>{t("shop.name")}</th><th>{t("request.preferredAt")}</th><th>{t("transaction.note")}</th><th>{t("common.status")}</th>{isOwner ? <th>{t("common.actions")}</th> : null}</tr></thead>
-      <tbody>{rows.map((row) => <tr key={row.id}>{isOwner ? <td>{row.customer_name}</td> : null}<td>{row.service_name}</td><td>{row.shop_name}</td><td>{row.preferred_at ? new Date(row.preferred_at).toLocaleString("vi-VN") : "-"}</td><td>{formatCell(row.note)}</td><td><StatusBadge t={t} value={row.status} /></td>{isOwner ? <td><div className="mh-action-group"><button className="mh-icon-action" disabled={row.status !== "pending"} title={t("request.confirm")} onClick={() => decide(row, "confirmed")}><Check size={16} /></button><button className="mh-icon-action danger" disabled={row.status !== "pending"} title={t("request.reject")} onClick={() => decide(row, "rejected")}><X size={16} /></button></div></td> : null}</tr>)}</tbody>
+      <tbody>{rows.map((row) => <tr key={row.id}>{isOwner ? <td>{row.customer_name}</td> : null}<td>{row.service_name}</td><td>{row.shop_name}</td><td>{row.preferred_at ? new Date(row.preferred_at).toLocaleString("vi-VN") : "-"}</td><td>{formatCell(row.note)}</td><td><StatusBadge t={t} value={row.status} /></td>{isOwner ? <td><div className="mh-action-group">{row.status === "pending" ? <><button className="mh-icon-action" title={t("request.confirm")} onClick={() => decide(row, "confirmed")}><Check size={16} /></button><button className="mh-icon-action danger" title={t("request.reject")} onClick={() => decide(row, "rejected")}><X size={16} /></button></> : null}{row.status === "confirmed" ? <><button className="mh-primary slim" type="button" onClick={() => decide(row, "completed")}>{t("request.completed")}</button><button className="mh-tool-button slim" type="button" onClick={() => decide(row, "cancelled")}>{t("request.cancelled")}</button></> : null}</div></td> : null}</tr>)}</tbody>
     </table>{!rows.length ? <div className="mh-empty">{t("common.empty")}</div> : null}</div></div>
   );
 }

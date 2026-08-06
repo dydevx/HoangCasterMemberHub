@@ -1845,6 +1845,91 @@ code {
   grid-template-columns: repeat(2, minmax(320px, 1fr));
 }
 
+.mh-customer-card-page,
+.mh-plan-usage,
+.mh-plan-usage-row,
+.mh-upcoming-list {
+  display: grid;
+  gap: 1rem;
+}
+
+.mh-member-card-identity {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.mh-member-card-identity small {
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.mh-tier-progress {
+  border-top: 1px solid rgba(255, 255, 255, 0.22);
+  display: grid;
+  gap: 0.55rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+}
+
+.mh-tier-progress > div:first-child,
+.mh-plan-usage-row > div:first-child,
+.mh-upcoming-row {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.mh-tier-progress small {
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.mh-tier-progress .mh-progress {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.mh-tier-progress .mh-progress div {
+  background: #5eead4;
+}
+
+.mh-owner-operations {
+  align-items: stretch;
+}
+
+.mh-plan-usage-row {
+  gap: 0.5rem;
+}
+
+.mh-plan-usage-row > div:first-child span,
+.mh-upcoming-row span,
+.mh-upcoming-row time {
+  color: var(--mh-muted);
+}
+
+.mh-plan-usage-row .mh-progress.warning div {
+  background: #d97706;
+}
+
+.mh-upcoming-row {
+  border-bottom: 1px solid var(--mh-line);
+  gap: 1rem;
+  padding: 0 0 0.8rem;
+}
+
+.mh-upcoming-row:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.mh-upcoming-row > div {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.mh-upcoming-row time {
+  font-size: 0.88rem;
+  white-space: nowrap;
+}
+
 .mh-member-card {
   background:
     radial-gradient(circle at top right, rgba(64, 196, 174, 0.35), transparent 32%),
