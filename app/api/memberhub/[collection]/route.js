@@ -370,6 +370,63 @@ async function applyTransactionToCard(supabase, transaction, previous = null) {
   } catch {}
 }
 
+async function createTransactionForServiceRequest(supabase, request) {
+  const transactionCode = `SR-${request.id}`;
+  const { data: existing, error: existingError } = await supabase
+    .from("transactions")
+    .select("*")
+    .eq("transaction_code", transactionCode)
+    .maybeSingle();
+
+  if (existingError) throw existingError;
+  if (existing) return existing;
+
+  const { data: service, error: serviceError } = await supabase
+    .from("services")
+    .select("id,shop_id,price")
+    .eq("id", request.service_id)
+    .maybeSingle();
+
+  if (serviceError) throw serviceError;
+  if (!service || Number(service.shop_id) !== Number(request.shop_id)) {
+    throw new Error("Dich vu cua yeu cau khong hop le");
+  }
+
+  const amount = Math.max(0, Number(service.price || 0));
+  const transactionPayload = {
+    customer_id: request.customer_id,
+    shop_id: request.shop_id,
+    service_id: request.service_id,
+    transaction_code: transactionCode,
+    price: amount,
+    discount: 0,
+    tax: 0,
+    amount,
+    points_delta: await pointsForTransaction(supabase, { shop_id: request.shop_id, amount }),
+    note: request.note || `Service request #${request.id}`
+  };
+  const { data: transaction, error: transactionError } = await runMutation(
+    supabase,
+    resources.transactions,
+    "post",
+    transactionPayload
+  );
+
+  if (transactionError) {
+    // A concurrent confirmation may have inserted the deterministic code first.
+    const { data: concurrentTransaction } = await supabase
+      .from("transactions")
+      .select("*")
+      .eq("transaction_code", transactionCode)
+      .maybeSingle();
+    if (concurrentTransaction) return concurrentTransaction;
+    throw transactionError;
+  }
+
+  await applyTransactionToCard(supabase, transaction);
+  return transaction;
+}
+
 function prepareUserPayload(body, payload, mode) {
   const password = String(body.password || "").trim();
   const nextPayload = { ...payload };
@@ -782,6 +839,7 @@ async function writeResource(request, params, mode) {
 
   let previousTransaction = null;
   let previousShop = null;
+  let previousServiceRequest = null;
   if (mode === "patch" && collection === "shops") {
     const { data: shop } = await supabase
       .from("shops")
@@ -800,6 +858,19 @@ async function writeResource(request, params, mode) {
       .maybeSingle();
 
     previousTransaction = previous;
+  }
+
+  if (mode === "patch" && collection === "serviceRequests") {
+    const { data: previous, error: previousError } = await supabase
+      .from(config.table)
+      .select("id,shop_id,customer_id,service_id,preferred_at,note,status")
+      .eq("id", id)
+      .maybeSingle();
+
+    if (previousError || !previous) {
+      return NextResponse.json({ error: "Khong tim thay yeu cau dich vu" }, { status: 404 });
+    }
+    previousServiceRequest = previous;
   }
 
   const { data, error } = await runMutation(supabase, config, mode, payload, id);
@@ -891,6 +962,22 @@ async function writeResource(request, params, mode) {
       await applyTransactionToCard(supabase, data);
     } else {
       await applyTransactionToCard(supabase, data, previousTransaction);
+    }
+  }
+
+
+  if (collection === "serviceRequests" && mode === "patch" && data.status === "confirmed") {
+    try {
+      await createTransactionForServiceRequest(supabase, { ...previousServiceRequest, ...data });
+    } catch (transactionError) {
+      await supabase
+        .from(config.table)
+        .update({ status: previousServiceRequest?.status || "pending" })
+        .eq("id", data.id);
+      return NextResponse.json(
+        { error: transactionError.message || "Khong the ghi nhan doanh thu cho yeu cau" },
+        { status: 400 }
+      );
     }
   }
 
