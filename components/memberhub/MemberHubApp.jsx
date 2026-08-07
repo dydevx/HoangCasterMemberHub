@@ -639,7 +639,11 @@ function MemberHubAppContent({ locale, localeReady, setLocale }) {
   return (
     <div className="mh-shell">
       <aside className="mh-sidebar">
-        <Brand t={t} role={user.role} />
+        <Brand
+          role={user.role}
+          shop={isSuperAdmin(user) ? null : data?.shops?.[0]}
+          t={t}
+        />
         <nav className="mh-nav" aria-label="Workspace">
           {items.map(([id, labelKey, Icon]) => (
             <button
@@ -799,10 +803,10 @@ function CommandPalette({ items, onClose, onNavigate, t, unreadNotifications }) 
   );
 }
 
-function Brand({ t, role }) {
+function Brand({ t, role, shop }) {
   return (
     <div className="mh-brand">
-      <LogoMark />
+      <LogoMark alt={shop?.name ? `${shop.name} ${t("shop.logo")}` : ""} src={shop?.logo_data_url} />
       <div>
         <strong>{t("app.name")}</strong>
         <span>{t(roleKeys[role] || "app.tagline")}</span>
@@ -852,8 +856,21 @@ function LoginScreen({ loading, locale, status, t, theme, setLocale, setTheme, o
   );
 }
 
-function LogoMark() {
-  return <img className="mh-logo" src={withBasePath("/assets/logo.png")} alt="" aria-hidden="true" />;
+function LogoMark({ alt = "", src = "" }) {
+  const fallbackSrc = withBasePath("/assets/logo.png");
+
+  return (
+    <img
+      className="mh-logo"
+      src={src || fallbackSrc}
+      alt={alt}
+      aria-hidden={alt ? undefined : "true"}
+      onError={(event) => {
+        event.currentTarget.onerror = null;
+        event.currentTarget.src = fallbackSrc;
+      }}
+    />
+  );
 }
 
 function DashboardView({ addLocalRow, deleteLocalRow, toggleLockRow, updateLocalRow, view, user, data, t, onChangeAvatar }) {
