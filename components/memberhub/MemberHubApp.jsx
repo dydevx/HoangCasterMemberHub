@@ -961,7 +961,7 @@ function DashboardView({ addLocalRow, deleteLocalRow, toggleLockRow, updateLocal
   if (view === "overview") return <Overview data={data} t={t} user={user} />;
   if (view === "reports") return <Reports data={data} t={t} />;
   if (view === "scan") return <ScanView addLocalRow={addLocalRow} data={data} t={t} />;
-  if (view === "profile") return <Profile customers={data.customers} onChangeAvatar={onChangeAvatar} t={t} updateLocalRow={updateLocalRow} user={user} />;
+  if (view === "profile") return <Profile data={data} onChangeAvatar={onChangeAvatar} t={t} updateLocalRow={updateLocalRow} user={user} />;
   if (view === "services" && isCustomer(user)) return <CustomerServices addLocalRow={addLocalRow} data={data} t={t} />;
   if (view === "requests") return <ServiceRequests data={data} isOwner={isStoreOwner(user)} t={t} updateLocalRow={updateLocalRow} />;
   if (view === "customers" && isStoreOwner(user)) {
@@ -2647,8 +2647,9 @@ function UserAvatar({ user, fallback, src, className = "" }) {
   );
 }
 
-function Profile({ customers, onChangeAvatar, t, updateLocalRow, user }) {
-  const customer = customers?.[0];
+function Profile({ data, onChangeAvatar, t, updateLocalRow, user }) {
+  const customer = data.customers?.[0];
+  const card = data.cards?.find((item) => Number(item.customer_id) === Number(customer?.id));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -2676,55 +2677,87 @@ function Profile({ customers, onChangeAvatar, t, updateLocalRow, user }) {
     }
   }
 
+  if (!customer) return <div className="mh-empty">{t("common.empty")}</div>;
+
   return (
-    <section className="mh-card mh-profile">
-      <UserAvatar className="large" fallback={customer} user={user} />
-      <button className="mh-tool-button slim" type="button" onClick={onChangeAvatar}>
-        <Camera size={16} aria-hidden="true" />
-        <span>{t("avatar.change")}</span>
-      </button>
-      <h2>{user.name}</h2>
-      <p>{user.email}</p>
-      <div className="mh-profile-extra">
-        <span>{t("customer.phone")}: {user.phone || "-"}</span>
-        <span>{t("shop.name")}: {customer?.shop_name || "-"}</span>
-        <span>{t("customer.birthday")}: {dateText(customer?.birthday)}</span>
-        <span>{t("shop.address")}: {customer?.address || "-"}</span>
-      </div>
-      {customer ? (
-        <form className="mh-form" onSubmit={submit}>
-          <label>
-            {t("customer.name")}
-            <input name="name" defaultValue={customer.name || ""} />
-          </label>
-          <label>
-            {t("customer.email")}
-            <input name="email" type="email" defaultValue={customer.email || ""} />
-          </label>
-          <label>
-            {t("customer.phone")}
-            <input name="phone" defaultValue={customer.phone || ""} />
-          </label>
-          <label>
-            {t("customer.birthday")}
-            <input name="birthday" type="date" defaultValue={customer.birthday || ""} />
-          </label>
-          <label>
-            {t("shop.address")}
-            <input name="address" defaultValue={customer.address || ""} />
-          </label>
-          <label>
-            {t("customer.notes")}
-            <textarea name="notes" defaultValue={customer.notes || ""} rows={3} />
-          </label>
-          {error ? <div className="mh-alert">{error}</div> : null}
-          <button className="mh-primary slim" type="submit" disabled={saving}>
-            {saving ? t("common.loading") : t("common.save")}
+    <section className="mh-profile-layout">
+      <aside className="mh-profile-summary">
+        <div className="mh-profile-avatar-wrap">
+          <UserAvatar className="large" fallback={customer} user={user} />
+          <button type="button" onClick={onChangeAvatar} title={t("avatar.change")}>
+            <Camera size={16} aria-hidden="true" />
           </button>
+        </div>
+        <div className="mh-profile-identity">
+          <span>{t("app.customer")}</span>
+          <h2>{customer.name || user.name}</h2>
+          <p>{customer.email || user.email}</p>
+        </div>
+
+        <div className="mh-profile-facts">
+          <div><span>{t("shop.name")}</span><strong>{customer.shop_name || "-"}</strong></div>
+          <div><span>{t("customer.phone")}</span><strong>{customer.phone || user.phone || "-"}</strong></div>
+          <div><span>{t("customer.birthday")}</span><strong>{dateText(customer.birthday)}</strong></div>
+          <div><span>{t("card.number")}</span><strong>{card?.card_number || "-"}</strong></div>
+        </div>
+
+        {card ? (
+          <div className="mh-profile-membership">
+            <div><span>{t("card.tier")}</span><strong>{card.tier || "-"}</strong></div>
+            <div><span>{t("common.points")}</span><strong>{Number(card.points || 0).toLocaleString("vi-VN")}</strong></div>
+            <div><span>{t("card.spend")}</span><strong>{money(card.total_spend)}</strong></div>
+          </div>
+        ) : null}
+      </aside>
+
+      <div className="mh-profile-editor">
+        <header>
+          <div>
+            <h2>{t("profile.personalInfo")}</h2>
+            <p>{t("profile.personalCopy")}</p>
+          </div>
+          <button className="mh-tool-button slim" type="button" onClick={onChangeAvatar}>
+            <Camera size={16} aria-hidden="true" />
+            <span>{t("avatar.change")}</span>
+          </button>
+        </header>
+
+        <form className="mh-form mh-profile-form" onSubmit={submit}>
+          <div className="mh-profile-fields">
+            <label>
+              {t("customer.name")}
+              <input name="name" defaultValue={customer.name || ""} />
+            </label>
+            <label>
+              {t("customer.email")}
+              <input name="email" type="email" defaultValue={customer.email || ""} />
+            </label>
+            <label>
+              {t("customer.phone")}
+              <input name="phone" defaultValue={customer.phone || ""} />
+            </label>
+            <label>
+              {t("customer.birthday")}
+              <input name="birthday" type="date" defaultValue={customer.birthday || ""} />
+            </label>
+            <label className="wide">
+              {t("shop.address")}
+              <input name="address" defaultValue={customer.address || ""} />
+            </label>
+            <label className="wide">
+              {t("customer.notes")}
+              <textarea name="notes" defaultValue={customer.notes || ""} rows={4} />
+            </label>
+          </div>
+          {error ? <div className="mh-alert">{error}</div> : null}
+          <footer>
+            <span>{t("profile.saveHint")}</span>
+            <button className="mh-primary slim" type="submit" disabled={saving}>
+              {saving ? t("common.loading") : t("profile.saveChanges")}
+            </button>
+          </footer>
         </form>
-      ) : (
-        <div className="mh-empty">{t("common.empty")}</div>
-      )}
+      </div>
     </section>
   );
 }
