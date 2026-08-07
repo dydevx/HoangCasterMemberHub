@@ -22,6 +22,7 @@ create table if not exists public.member_users (
   status text not null default 'active' check (status in ('active', 'locked')),
   phone text,
   avatar_url text,
+  last_seen_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -565,6 +566,8 @@ where public.customers.id = deduped.id
 -- SaaS extensions for the production-style MemberHub dashboard.
 alter table public.member_users add column if not exists locale text default 'vi';
 alter table public.member_users add column if not exists avatar_url text;
+alter table public.member_users add column if not exists last_seen_at timestamptz;
+create index if not exists member_users_last_seen_idx on public.member_users(last_seen_at desc);
 alter table public.shops add column if not exists subscription_start_date date;
 alter table public.shops add column if not exists subscription_end_date date;
 alter table public.shops add column if not exists subscription_status text not null default 'active';
@@ -827,6 +830,10 @@ values
   ('sk', 'Slovencina', true),
   ('sl', 'Slovenscina', true),
   ('hr', 'Hrvatski', true),
+  ('bs', 'Bosanski', true),
+  ('sr', 'Srpski', true),
+  ('mk', 'Makedonski', true),
+  ('sq', 'Shqip', true),
   ('bg', 'Bulgarian', true),
   ('uk', 'Ukrainian', true),
   ('ru', 'Russian', true),
@@ -835,9 +842,15 @@ values
   ('lv', 'Latviesu', true),
   ('lt', 'Lietuviu', true),
   ('ga', 'Irish', true),
+  ('mt', 'Malti', true),
   ('is', 'Islenska', true),
   ('ja', 'Japanese', true),
-  ('ko', 'Korean', true)
+  ('ko', 'Korean', true),
+  ('zh', 'Chinese', true),
+  ('id', 'Bahasa Indonesia', true),
+  ('th', 'Thai', true),
+  ('hi', 'Hindi', true),
+  ('ar', 'Arabic', true)
 on conflict (id) do update set name = excluded.name, enabled = excluded.enabled;
 
 insert into public.membership_levels

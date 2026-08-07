@@ -1952,6 +1952,28 @@ code {
   color: var(--mh-muted);
 }
 
+.mh-presence {
+  align-items: center;
+  color: var(--mh-muted);
+  display: inline-flex;
+  font-size: 0.82rem;
+  font-weight: 800;
+  gap: 0.45rem;
+  white-space: nowrap;
+}
+
+.mh-presence > span {
+  background: currentColor;
+  border-radius: 50%;
+  box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 14%, transparent);
+  height: 0.48rem;
+  width: 0.48rem;
+}
+
+.mh-presence.online {
+  color: var(--mh-accent);
+}
+
 .mh-status.pending {
   background: rgba(184, 117, 3, 0.12);
   border-color: rgba(184, 117, 3, 0.22);

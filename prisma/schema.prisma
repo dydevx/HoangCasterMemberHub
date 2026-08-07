@@ -23,6 +23,7 @@ model MemberUser {
   phone        String?
   locale       String?      @default("vi")
   avatarUrl    String?      @map("avatar_url")
+  lastSeenAt   DateTime?    @map("last_seen_at") @db.Timestamptz(6)
   createdAt    DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt    DateTime     @default(now()) @map("updated_at") @db.Timestamptz(6)
   ownedShops   Shop[]       @relation("ShopOwner")

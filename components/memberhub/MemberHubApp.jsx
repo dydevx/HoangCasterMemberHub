@@ -458,9 +458,7 @@ function MemberHubAppContent({ locale, localeReady, setLocale }) {
 
         setToken(savedToken);
         setUser(nextUser);
-        setLocale(isSuperAdmin(nextUser)
-          ? defaultLocale
-          : normalizeLocale(readStored("memberhub_locale", nextUser.locale || defaultLocale)));
+        setLocale(normalizeLocale(readStored("memberhub_locale", nextUser.locale || defaultLocale)));
         setView(isCustomer(nextUser) ? "cards" : "overview");
         setData(nextData);
       })
@@ -491,6 +489,7 @@ function MemberHubAppContent({ locale, localeReady, setLocale }) {
   useEffect(() => {
     if (!localeReady) return;
     document.documentElement.lang = locale;
+    document.documentElement.dir = locales.find((item) => item.id === locale)?.dir || "ltr";
     localStorage.setItem("memberhub_locale", locale);
     document.cookie = `memberhub_locale=${locale}; path=/; max-age=31536000; samesite=lax`;
   }, [locale, localeReady]);
@@ -543,6 +542,7 @@ function MemberHubAppContent({ locale, localeReady, setLocale }) {
       .on("postgres_changes", { event: "*", schema: "public", table: "notifications" }, scheduleRealtimeSync)
       .on("postgres_changes", { event: "*", schema: "public", table: "service_requests" }, scheduleRealtimeSync)
       .on("postgres_changes", { event: "*", schema: "public", table: "transactions" }, scheduleRealtimeSync)
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "member_users" }, scheduleRealtimeSync)
       .subscribe((status) => {
         if (!active) return;
         setRealtimeStatus(status === "SUBSCRIBED" ? "connected" : "polling");
@@ -563,6 +563,27 @@ function MemberHubAppContent({ locale, localeReady, setLocale }) {
     };
   }, [token, user?.id]);
 
+  useEffect(() => {
+    if (!token || !user) return;
+    let active = true;
+    const heartbeat = () => {
+      if (!active || document.visibilityState === "hidden") return;
+      api("/api/presence", token, { method: "POST" }).catch(() => {});
+    };
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") heartbeat();
+    };
+
+    heartbeat();
+    const timer = setInterval(heartbeat, 15_000);
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      active = false;
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [token, user?.id]);
+
   async function login(event) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
@@ -580,7 +601,7 @@ function MemberHubAppContent({ locale, localeReady, setLocale }) {
 
       localStorage.setItem("memberhub_token", payload.token);
       const nextUser = { ...payload.user, role: normalizeRole(payload.user.role) };
-      const nextLocale = isSuperAdmin(nextUser) ? defaultLocale : normalizeLocale(locale);
+      const nextLocale = normalizeLocale(locale);
       const nextData = await api("/api/app-data", payload.token);
 
       setToken(payload.token);
@@ -597,6 +618,7 @@ function MemberHubAppContent({ locale, localeReady, setLocale }) {
   }
 
   function logout() {
+    api("/api/presence", token, { method: "DELETE", keepalive: true }).catch(() => {});
     bootstrapRequests.delete(token);
     localStorage.removeItem("memberhub_token");
     setToken("");
@@ -3050,6 +3072,12 @@ function getColumns(view, t, data = {}) {
     ],
     customers: [
       { key: "name", label: t("customer.name") },
+      { key: "is_online", label: t("presence.label"), render: (row) => (
+        <span className={`mh-presence ${row.is_online ? "online" : "offline"}`}>
+          <span aria-hidden="true" />
+          {row.is_online ? t("presence.online") : t("presence.offline")}
+        </span>
+      ) },
       linkColumn("customer_url", t("common.link")),
       { key: "shop_name", label: t("shop.name") },
       { key: "email", label: t("customer.email") },
