@@ -41,6 +41,7 @@ import { useRouter } from "next/navigation";
 import { createTranslator as createNextIntlTranslator, NextIntlClientProvider } from "next-intl";
 import { dashboardPathFor, isCustomer, isStoreOwner, isSuperAdmin, normalizeRole } from "@/lib/memberhub/access";
 import { defaultLocale, getMessagesForLocale, normalizeLocale } from "@/lib/memberhub/i18n";
+import { supabaseClient } from "@/lib/supabaseClient";
 import { normalizeRoutePath } from "@/lib/memberhub/slug";
 import { subscriptionPlanLimits } from "@/lib/memberhub/subscriptionPlans";
 import { createTranslator, locales } from "@/messages/memberhub";
@@ -418,6 +419,8 @@ function MemberHubAppContent({ locale, localeReady, setLocale }) {
   const [toast, setToast] = useState("");
   const [commandOpen, setCommandOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [realtimeStatus, setRealtimeStatus] = useState("polling");
+  const realtimeRefreshRef = useRef(false);
 
   const fallbackT = useMemo(() => createTranslator(locale), [locale]);
   const intlT = useMemo(() => {
@@ -509,6 +512,56 @@ function MemberHubAppContent({ locale, localeReady, setLocale }) {
     window.addEventListener("keydown", handleShortcut);
     return () => window.removeEventListener("keydown", handleShortcut);
   }, []);
+
+  useEffect(() => {
+    if (!token || !user) return;
+    let active = true;
+    let debounceTimer = null;
+
+    async function syncLatestData(source = "polling") {
+      if (!active || realtimeRefreshRef.current || document.visibilityState === "hidden") return;
+      realtimeRefreshRef.current = true;
+      if (source === "realtime") setRealtimeStatus("syncing");
+      try {
+        const nextData = await api("/api/app-data", token);
+        if (active) setData(nextData);
+        if (active && source === "realtime") setRealtimeStatus("connected");
+      } catch {
+        if (active) setRealtimeStatus("polling");
+      } finally {
+        realtimeRefreshRef.current = false;
+      }
+    }
+
+    function scheduleRealtimeSync() {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => syncLatestData("realtime"), 350);
+    }
+
+    const channel = supabaseClient
+      ?.channel(`memberhub-live-${user.id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "notifications" }, scheduleRealtimeSync)
+      .on("postgres_changes", { event: "*", schema: "public", table: "service_requests" }, scheduleRealtimeSync)
+      .on("postgres_changes", { event: "*", schema: "public", table: "transactions" }, scheduleRealtimeSync)
+      .subscribe((status) => {
+        if (!active) return;
+        setRealtimeStatus(status === "SUBSCRIBED" ? "connected" : "polling");
+      });
+
+    const pollTimer = setInterval(() => syncLatestData("polling"), 20000);
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") syncLatestData("polling");
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    return () => {
+      active = false;
+      clearTimeout(debounceTimer);
+      clearInterval(pollTimer);
+      document.removeEventListener("visibilitychange", handleVisibility);
+      if (channel) supabaseClient?.removeChannel(channel);
+    };
+  }, [token, user?.id]);
 
   async function login(event) {
     event.preventDefault();
@@ -680,6 +733,10 @@ function MemberHubAppContent({ locale, localeReady, setLocale }) {
             <button className="mh-icon-toggle" disabled={refreshing} type="button" onClick={refreshData} title={t("command.refresh")}>
               <RefreshCw className={refreshing ? "mh-spin" : ""} size={17} aria-hidden="true" />
             </button>
+            <span className={`mh-live-status ${realtimeStatus}`} title={t(`realtime.${realtimeStatus}`)}>
+              <i aria-hidden="true" />
+              <span>{t(realtimeStatus === "connected" ? "realtime.live" : "realtime.syncing")}</span>
+            </span>
             {isStoreOwner(user) || isCustomer(user) ? (
               <LanguageSwitcher locale={locale} setLocale={setLocale} t={t} />
             ) : null}
@@ -737,6 +794,7 @@ function MemberHubAppContent({ locale, localeReady, setLocale }) {
       {toast ? <div className="mh-toast"><Check size={16} />{toast}</div> : null}
       {commandOpen ? (
         <CommandPalette
+          data={data}
           items={items}
           onClose={() => setCommandOpen(false)}
           onNavigate={(nextView) => {
@@ -751,11 +809,13 @@ function MemberHubAppContent({ locale, localeReady, setLocale }) {
   );
 }
 
-function CommandPalette({ items, onClose, onNavigate, t, unreadNotifications }) {
+function CommandPalette({ data, items, onClose, onNavigate, t, unreadNotifications }) {
   const [query, setQuery] = useState("");
   const inputRef = useRef(null);
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const filteredItems = items.filter(([, labelKey]) => t(labelKey).toLocaleLowerCase().includes(normalizedQuery));
+  const searchResults = useMemo(() => buildGlobalSearchResults(data, normalizedQuery, t), [data, normalizedQuery, t]);
+  const firstDestination = searchResults[0]?.view || filteredItems[0]?.[0];
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -778,7 +838,7 @@ function CommandPalette({ items, onClose, onNavigate, t, unreadNotifications }) 
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={(event) => {
-              if (event.key === "Enter" && filteredItems[0]) onNavigate(filteredItems[0][0]);
+              if (event.key === "Enter" && firstDestination) onNavigate(firstDestination);
             }}
             placeholder={t("command.placeholder")}
             aria-label={t("command.search")}
@@ -786,16 +846,40 @@ function CommandPalette({ items, onClose, onNavigate, t, unreadNotifications }) 
           <kbd>ESC</kbd>
         </div>
         <div className="mh-command-list">
-          <p>{t("command.navigate")}</p>
-          {filteredItems.map(([id, labelKey, Icon]) => (
-            <button key={id} type="button" onClick={() => onNavigate(id)}>
-              <span><Icon size={18} aria-hidden="true" />{t(labelKey)}</span>
-              {id === "notifications" && unreadNotifications > 0
-                ? <strong>{unreadNotifications}</strong>
-                : <ChevronRight size={16} aria-hidden="true" />}
-            </button>
-          ))}
-          {!filteredItems.length ? <div className="mh-command-empty">{t("command.empty")}</div> : null}
+          {!normalizedQuery ? (
+            <>
+              <p>{t("command.navigate")}</p>
+              {items.map(([id, labelKey, Icon]) => (
+                <button key={id} type="button" onClick={() => onNavigate(id)}>
+                  <span><Icon size={18} aria-hidden="true" />{t(labelKey)}</span>
+                  {id === "notifications" && unreadNotifications > 0
+                    ? <strong>{unreadNotifications}</strong>
+                    : <ChevronRight size={16} aria-hidden="true" />}
+                </button>
+              ))}
+            </>
+          ) : (
+            <>
+              {filteredItems.length ? <p>{t("command.workspaces")}</p> : null}
+              {filteredItems.map(([id, labelKey, Icon]) => (
+                <button key={`view:${id}`} type="button" onClick={() => onNavigate(id)}>
+                  <span><Icon size={18} aria-hidden="true" />{t(labelKey)}</span>
+                  <ChevronRight size={16} aria-hidden="true" />
+                </button>
+              ))}
+              {searchResults.length ? <p>{t("command.dataResults")}</p> : null}
+              {searchResults.map((result) => (
+                <button className="mh-command-result" key={result.key} type="button" onClick={() => onNavigate(result.view)}>
+                  <span>
+                    <result.Icon size={18} aria-hidden="true" />
+                    <span><b>{result.title}</b><small>{result.subtitle}</small></span>
+                  </span>
+                  <em>{result.kind}</em>
+                </button>
+              ))}
+              {!filteredItems.length && !searchResults.length ? <div className="mh-command-empty">{t("command.empty")}</div> : null}
+            </>
+          )}
         </div>
         <footer><span>↑↓ {t("command.move")}</span><span>↵ {t("command.select")}</span></footer>
       </section>
@@ -934,6 +1018,9 @@ function Overview({ data, t, user }) {
     revenueToday,
     revenueWeek,
     revenueMonth,
+    revenueDailyComparison,
+    revenueWeeklyComparison,
+    revenueMonthlyComparison,
     pendingRequests,
     upcomingRequests
   } = useMemo(() => {
@@ -965,13 +1052,16 @@ function Overview({ data, t, user }) {
     const revenueToday = sumRecent(transactions, 1);
     const revenueWeek = sumRecent(transactions, 7);
     const revenueMonth = sumRecent(transactions, 30);
+    const revenueDailyComparison = compareRevenuePeriods(transactions, 1);
+    const revenueWeeklyComparison = compareRevenuePeriods(transactions, 7);
+    const revenueMonthlyComparison = compareRevenuePeriods(transactions, 30);
     const pendingRequests = (data.serviceRequests || []).filter((request) => request.status === "pending").length;
     const upcomingRequests = (data.serviceRequests || [])
       .filter((request) => request.status === "confirmed" && request.preferred_at && new Date(request.preferred_at).getTime() >= Date.now())
       .sort((left, right) => new Date(left.preferred_at).getTime() - new Date(right.preferred_at).getTime())
       .slice(0, 5);
 
-    return { transactions, customers, shops, revenue, points, newCustomers, topServices, activeShops, expiringShops, expiredShops, alerts, currentShop, revenueToday, revenueWeek, revenueMonth, pendingRequests, upcomingRequests };
+    return { transactions, customers, shops, revenue, points, newCustomers, topServices, activeShops, expiringShops, expiredShops, alerts, currentShop, revenueToday, revenueWeek, revenueMonth, revenueDailyComparison, revenueWeeklyComparison, revenueMonthlyComparison, pendingRequests, upcomingRequests };
   }, [data, user]);
 
   const customerInsights = useMemo(
@@ -996,9 +1086,9 @@ function Overview({ data, t, user }) {
           <>
             <Stat label={currentShop?.name || t("shop.name")} value={currentShop?.computed_remaining_days === null ? "-" : `${currentShop?.computed_remaining_days ?? "-"} ${t("common.days")}`} />
             <Stat label={t("dashboard.customers")} value={customers.length} />
-            <Stat label={t("reports.daily")} value={money(revenueToday)} />
-            <Stat label={t("reports.weekly")} value={money(revenueWeek)} />
-            <Stat label={t("reports.monthly")} value={money(revenueMonth)} />
+            <Stat comparison={revenueDailyComparison} label={t("reports.daily")} trendLabel={t("revenue.vsPreviousDay")} value={money(revenueToday)} />
+            <Stat comparison={revenueWeeklyComparison} label={t("reports.weekly")} trendLabel={t("revenue.vsPreviousWeek")} value={money(revenueWeek)} />
+            <Stat comparison={revenueMonthlyComparison} label={t("reports.monthly")} trendLabel={t("revenue.vsPreviousMonth")} value={money(revenueMonth)} />
             <Stat label={t("request.pending")} value={pendingRequests} />
           </>
         )}
@@ -1052,6 +1142,7 @@ function Overview({ data, t, user }) {
       ) : null}
 
       {isStoreOwner(user) ? <CustomerInsights insights={customerInsights} t={t} /> : null}
+      {isStoreOwner(user) ? <CustomerSegments insights={customerInsights} t={t} /> : null}
 
       <section className="mh-card mh-chart-card">
         <PanelTitle icon={FileText} title={t("dashboard.topServices")} />
@@ -1105,6 +1196,42 @@ function CustomerInsights({ insights, t }) {
           </article>
         ))}
         {!rankedCustomers.length ? <div className="mh-insights-empty">{t("dashboard.noCustomerInsights")}</div> : null}
+      </div>
+    </section>
+  );
+}
+
+function CustomerSegments({ insights, t }) {
+  const segmentDefinitions = [
+    { id: "vip", title: t("segment.vip"), description: t("segment.vipCopy"), rows: insights.segments.vip },
+    { id: "risk", title: t("segment.atRisk"), description: t("segment.atRiskCopy"), rows: insights.segments.atRisk },
+    { id: "offer", title: t("segment.offer"), description: t("segment.offerCopy"), rows: insights.segments.offer }
+  ];
+
+  return (
+    <section className="mh-card mh-customer-segments">
+      <div className="mh-insights-heading">
+        <PanelTitle icon={ListFilter} title={t("segment.title")} />
+        <p>{t("segment.description")}</p>
+      </div>
+      <div className="mh-segment-grid">
+        {segmentDefinitions.map((segment) => (
+          <article className={`mh-segment ${segment.id}`} key={segment.id}>
+            <header>
+              <div><strong>{segment.title}</strong><span>{segment.description}</span></div>
+              <b>{segment.rows.length}</b>
+            </header>
+            <div className="mh-segment-list">
+              {segment.rows.slice(0, 4).map((customer) => (
+                <div key={customer.key}>
+                  <span><strong>{customer.name}</strong><small>{customer.favoriteService || t("common.empty")}</small></span>
+                  <b>{segment.id === "risk" ? `${customer.daysSinceVisit} ${t("common.days")}` : money(customer.totalSpend)}</b>
+                </div>
+              ))}
+              {!segment.rows.length ? <p>{t("segment.empty")}</p> : null}
+            </div>
+          </article>
+        ))}
       </div>
     </section>
   );
@@ -2784,11 +2911,17 @@ function PanelTitle({ icon: Icon, title }) {
   );
 }
 
-function Stat({ label, value }) {
+function Stat({ comparison, label, trendLabel, value }) {
   return (
     <article className="mh-stat">
       <span>{label}</span>
       <strong>{value}</strong>
+      {comparison ? (
+        <div className={`mh-stat-trend ${comparison.direction}`}>
+          <b>{comparison.direction === "up" ? "↑" : comparison.direction === "down" ? "↓" : "→"} {Math.abs(comparison.percent)}%</b>
+          <small>{trendLabel}</small>
+        </div>
+      ) : null}
     </article>
   );
 }
@@ -3207,6 +3340,70 @@ function rankBy(rows, labelKey, valueKey) {
   return [...map.entries()].map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value);
 }
 
+function normalizeSearchText(value) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase();
+}
+
+function buildGlobalSearchResults(data, query, t) {
+  const needle = normalizeSearchText(query).trim();
+  if (!needle || !data) return [];
+
+  const definitions = [
+    {
+      rows: data.customers || [],
+      view: "customers",
+      kind: t("search.customer"),
+      Icon: UserRound,
+      title: (row) => row.name || row.email || `#${row.id}`,
+      subtitle: (row) => [row.phone, row.email].filter(Boolean).join(" · "),
+      values: (row) => [row.name, row.email, row.phone, row.slug, row.id]
+    },
+    {
+      rows: data.transactions || [],
+      view: "transactions",
+      kind: t("search.transaction"),
+      Icon: ReceiptText,
+      title: (row) => row.transaction_code || `#${row.id}`,
+      subtitle: (row) => [row.customer_name, row.service_name, money(row.amount)].filter(Boolean).join(" · "),
+      values: (row) => [row.transaction_code, row.customer_name, row.service_name, row.amount, row.note, row.id]
+    },
+    {
+      rows: data.services || [],
+      view: "services",
+      kind: t("search.service"),
+      Icon: Scissors,
+      title: (row) => row.name || `#${row.id}`,
+      subtitle: (row) => [row.shop_name, money(row.price)].filter(Boolean).join(" · "),
+      values: (row) => [row.name, row.description, row.shop_name, row.price, row.id]
+    },
+    {
+      rows: data.serviceRequests || [],
+      view: "requests",
+      kind: t("search.request"),
+      Icon: ListFilter,
+      title: (row) => row.customer_name || `#${row.id}`,
+      subtitle: (row) => [row.service_name, row.status, dateText(row.preferred_at)].filter(Boolean).join(" · "),
+      values: (row) => [row.customer_name, row.service_name, row.shop_name, row.status, row.note, row.id]
+    }
+  ];
+
+  return definitions.flatMap((definition) => definition.rows
+    .filter((row) => definition.values(row).some((value) => normalizeSearchText(value).includes(needle)))
+    .slice(0, 5)
+    .map((row) => ({
+      key: `${definition.view}:${row.id}`,
+      view: definition.view,
+      kind: definition.kind,
+      Icon: definition.Icon,
+      title: definition.title(row),
+      subtitle: definition.subtitle(row) || t("common.empty")
+    })))
+    .slice(0, 12);
+}
+
 function buildCustomerInsights(transactions, customers) {
   const customerById = new Map(customers.map((customer) => [String(customer.id), customer]));
   const customerMap = new Map();
@@ -3238,14 +3435,35 @@ function buildCustomerInsights(transactions, customers) {
   const rankedCustomers = [...customerMap.values()]
     .map((customer) => ({
       ...customer,
-      favoriteService: [...customer.services.entries()].sort((left, right) => right[1] - left[1])[0]?.[0] || ""
+      favoriteService: [...customer.services.entries()].sort((left, right) => right[1] - left[1])[0]?.[0] || "",
+      daysSinceVisit: customer.lastVisit
+        ? Math.max(0, Math.floor((Date.now() - Number(customer.lastVisit)) / (24 * 60 * 60 * 1000)))
+        : 9999
     }))
     .sort((left, right) => right.totalSpend - left.totalSpend || right.visits - left.visits);
   const activeThreshold = Date.now() - 30 * 24 * 60 * 60 * 1000;
   const repeatCustomers = rankedCustomers.filter((customer) => customer.visits > 1).length;
+  const averageCustomerSpend = rankedCustomers.length
+    ? rankedCustomers.reduce((sum, customer) => sum + customer.totalSpend, 0) / rankedCustomers.length
+    : 0;
+  const vipCount = rankedCustomers.length ? Math.max(1, Math.ceil(rankedCustomers.length * 0.2)) : 0;
+  const vipKeys = new Set(rankedCustomers.slice(0, vipCount).map((customer) => customer.key));
+  const vip = rankedCustomers.filter((customer) => vipKeys.has(customer.key));
+  const atRisk = rankedCustomers
+    .filter((customer) => !vipKeys.has(customer.key)
+      && customer.daysSinceVisit >= 45
+      && (customer.visits >= 2 || customer.totalSpend >= averageCustomerSpend))
+    .sort((left, right) => right.daysSinceVisit - left.daysSinceVisit);
+  const atRiskKeys = new Set(atRisk.map((customer) => customer.key));
+  const offer = rankedCustomers
+    .filter((customer) => !vipKeys.has(customer.key)
+      && !atRiskKeys.has(customer.key)
+      && (customer.visits >= 2 || customer.totalSpend >= averageCustomerSpend * 0.6))
+    .sort((left, right) => right.totalSpend - left.totalSpend);
 
   return {
     rankedCustomers,
+    segments: { vip, atRisk, offer },
     averageOrderValue: transactions.length
       ? transactions.reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0) / transactions.length
       : 0,
@@ -3260,4 +3478,31 @@ function sumRecent(rows, days) {
     const created = new Date(row.created_at || 0).getTime();
     return created >= min ? sum + Number(row.amount || 0) : sum;
   }, 0);
+}
+
+function compareRevenuePeriods(rows, days) {
+  const now = Date.now();
+  const duration = days * 24 * 60 * 60 * 1000;
+  const currentStart = now - duration;
+  const previousStart = currentStart - duration;
+  let current = 0;
+  let previous = 0;
+
+  rows.forEach((row) => {
+    const createdAt = new Date(row.created_at || 0).getTime();
+    const amount = Number(row.amount || 0);
+    if (createdAt >= currentStart && createdAt <= now) current += amount;
+    else if (createdAt >= previousStart && createdAt < currentStart) previous += amount;
+  });
+
+  const percent = previous > 0
+    ? Math.round(((current - previous) / previous) * 100)
+    : current > 0 ? 100 : 0;
+
+  return {
+    current,
+    previous,
+    percent,
+    direction: percent > 0 ? "up" : percent < 0 ? "down" : "flat"
+  };
 }
