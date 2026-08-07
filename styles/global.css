@@ -710,6 +710,205 @@ code {
   }
 }
 
+/* Command palette and live workspace controls */
+.mh-nav-count {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 7px;
+  color: #fff;
+  display: inline-flex;
+  font-size: 0.68rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  height: 1.35rem;
+  justify-content: center;
+  margin-left: auto;
+  min-width: 1.35rem;
+  padding: 0 0.3rem;
+}
+
+.mh-command-trigger {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.55rem;
+  min-width: 10rem;
+}
+
+.mh-command-trigger kbd,
+.mh-command-search kbd {
+  background: color-mix(in srgb, var(--mh-panel-soft) 78%, transparent);
+  border: 1px solid var(--mh-line);
+  border-radius: 6px;
+  color: var(--mh-muted);
+  font-family: inherit;
+  font-size: 0.67rem;
+  font-weight: 750;
+  margin-left: auto;
+  padding: 0.16rem 0.38rem;
+}
+
+.mh-command-backdrop {
+  align-items: flex-start;
+  animation: mh-command-fade 160ms ease both;
+  background: rgba(9, 15, 28, 0.5);
+  backdrop-filter: blur(8px);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: min(16vh, 8rem) 1rem 1rem;
+  position: fixed;
+  z-index: 80;
+}
+
+.mh-command {
+  animation: mh-command-enter 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  background: color-mix(in srgb, var(--mh-panel-solid) 96%, transparent);
+  border: 1px solid color-mix(in srgb, var(--mh-line) 76%, transparent);
+  border-radius: 16px;
+  box-shadow: 0 32px 90px rgba(16, 35, 70, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  max-width: 36rem;
+  overflow: hidden;
+  width: 100%;
+}
+
+.mh-command-search {
+  align-items: center;
+  border-bottom: 1px solid var(--mh-line);
+  display: flex;
+  gap: 0.8rem;
+  padding: 1rem 1.1rem;
+}
+
+.mh-command-search input {
+  background: transparent;
+  border: 0;
+  color: var(--mh-text);
+  flex: 1;
+  font: inherit;
+  font-size: 1rem;
+  min-width: 0;
+  outline: 0;
+}
+
+.mh-command-search input::placeholder {
+  color: var(--mh-muted);
+}
+
+.mh-command-list {
+  max-height: min(24rem, 52vh);
+  overflow-y: auto;
+  padding: 0.65rem;
+}
+
+.mh-command-list > p {
+  color: var(--mh-muted);
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  margin: 0.35rem 0.5rem 0.45rem;
+  text-transform: uppercase;
+}
+
+.mh-command-list button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 10px;
+  color: var(--mh-text);
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  justify-content: space-between;
+  padding: 0.75rem 0.8rem;
+  transition: background 140ms ease, transform 140ms ease;
+  width: 100%;
+}
+
+.mh-command-list button span {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.7rem;
+}
+
+.mh-command-list button:hover,
+.mh-command-list button:focus-visible {
+  background: color-mix(in srgb, var(--mh-brand) 10%, transparent);
+  outline: 0;
+}
+
+.mh-command-list button:active {
+  transform: scale(0.985);
+}
+
+.mh-command-list button strong {
+  background: var(--mh-brand);
+  border-radius: 6px;
+  color: #fff;
+  font-size: 0.72rem;
+  padding: 0.15rem 0.4rem;
+}
+
+.mh-command-empty {
+  color: var(--mh-muted);
+  padding: 2.5rem 1rem;
+  text-align: center;
+}
+
+.mh-command footer {
+  background: color-mix(in srgb, var(--mh-panel-soft) 82%, transparent);
+  border-top: 1px solid var(--mh-line);
+  color: var(--mh-muted);
+  display: flex;
+  font-size: 0.7rem;
+  gap: 1rem;
+  justify-content: flex-end;
+  padding: 0.6rem 0.9rem;
+}
+
+.mh-icon-toggle:disabled {
+  cursor: wait;
+  opacity: 0.62;
+}
+
+@keyframes mh-command-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes mh-command-enter {
+  from { opacity: 0; transform: translateY(-10px) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (max-width: 900px) {
+  .mh-command-trigger {
+    min-width: 0;
+  }
+
+  .mh-command-trigger span,
+  .mh-command-trigger kbd {
+    display: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .mh-command-backdrop {
+    padding-top: 4.5rem;
+  }
+
+  .mh-command {
+    border-radius: 14px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mh-command-backdrop,
+  .mh-command {
+    animation: none;
+  }
+}
+
 /* MemberHub app */
 .mh-entry,
 .mh-auth {
@@ -2824,5 +3023,197 @@ code {
     justify-content: flex-start;
     white-space: nowrap;
     width: fit-content !important;
+  }
+}
+
+/* Store-owner customer intelligence */
+.mh-customer-insights {
+  overflow: hidden;
+  padding: 0;
+}
+
+.mh-insights-heading {
+  align-items: flex-end;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  padding: 1.25rem 1.35rem 0.9rem;
+}
+
+.mh-insights-heading .mh-panel-title {
+  margin: 0;
+}
+
+.mh-insights-heading > p {
+  color: var(--mh-muted);
+  font-size: 0.82rem;
+  margin: 0;
+  max-width: 28rem;
+  text-align: right;
+}
+
+.mh-insight-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0 1.35rem 1rem;
+}
+
+.mh-insight-metrics > div {
+  border-left: 1px solid var(--mh-line);
+  padding: 0.35rem 1rem;
+}
+
+.mh-insight-metrics > div:first-child {
+  border-left: 0;
+  padding-left: 0;
+}
+
+.mh-insight-metrics span,
+.mh-rank-detail span,
+.mh-rank-spend span {
+  color: var(--mh-muted);
+  display: block;
+  font-size: 0.72rem;
+}
+
+.mh-insight-metrics strong {
+  color: var(--mh-text);
+  display: block;
+  font-size: clamp(1rem, 1.7vw, 1.35rem);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.025em;
+  margin-top: 0.16rem;
+}
+
+.mh-customer-ranking {
+  background: color-mix(in srgb, var(--mh-panel-soft) 66%, transparent);
+  border-top: 1px solid var(--mh-line);
+  padding: 0.35rem 0.7rem 0.7rem;
+}
+
+.mh-customer-ranking article {
+  align-items: center;
+  border-bottom: 1px solid color-mix(in srgb, var(--mh-line) 72%, transparent);
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: 2.2rem minmax(10rem, 1.5fr) repeat(3, minmax(5rem, 0.65fr)) minmax(7rem, 0.85fr);
+  min-height: 4.35rem;
+  padding: 0.6rem;
+  transition: background 160ms ease, transform 160ms ease;
+}
+
+.mh-customer-ranking article:last-child {
+  border-bottom: 0;
+}
+
+.mh-customer-ranking article:hover {
+  background: color-mix(in srgb, var(--mh-brand) 6%, transparent);
+  transform: translateX(2px);
+}
+
+.mh-rank-number {
+  color: var(--mh-muted);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+}
+
+.mh-customer-ranking article.is-leader .mh-rank-number {
+  align-items: center;
+  background: var(--mh-brand);
+  border-radius: 7px;
+  color: #fff;
+  display: inline-flex;
+  height: 2rem;
+  justify-content: center;
+  width: 2rem;
+}
+
+.mh-rank-customer strong,
+.mh-rank-customer span {
+  display: block;
+}
+
+.mh-rank-customer strong {
+  color: var(--mh-text);
+  font-size: 0.9rem;
+}
+
+.mh-rank-customer span {
+  color: var(--mh-muted);
+  font-size: 0.75rem;
+  margin-top: 0.15rem;
+}
+
+.mh-rank-detail strong,
+.mh-rank-spend strong {
+  display: block;
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+  margin-top: 0.16rem;
+}
+
+.mh-rank-spend {
+  text-align: right;
+}
+
+.mh-rank-spend strong {
+  color: var(--mh-brand-dark);
+}
+
+.mh-insights-empty {
+  color: var(--mh-muted);
+  padding: 2.75rem 1rem;
+  text-align: center;
+}
+
+@media (max-width: 1080px) {
+  .mh-customer-ranking article {
+    grid-template-columns: 2.2rem minmax(10rem, 1.4fr) repeat(2, minmax(5rem, 0.7fr)) minmax(7rem, 0.9fr);
+  }
+
+  .mh-rank-detail:nth-of-type(4) {
+    display: none;
+  }
+}
+
+@media (max-width: 760px) {
+  .mh-insights-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .mh-insights-heading > p {
+    text-align: left;
+  }
+
+  .mh-insight-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    row-gap: 0.9rem;
+  }
+
+  .mh-insight-metrics > div:nth-child(3) {
+    border-left: 0;
+    padding-left: 0;
+  }
+
+  .mh-customer-ranking article {
+    gap: 0.65rem;
+    grid-template-columns: 2.2rem minmax(0, 1fr) auto;
+    padding-block: 0.75rem;
+  }
+
+  .mh-rank-detail {
+    display: none;
+  }
+
+  .mh-rank-spend {
+    min-width: 6.5rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mh-customer-ranking article {
+    transition: none;
   }
 }

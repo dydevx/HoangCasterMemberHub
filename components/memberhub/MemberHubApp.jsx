@@ -22,6 +22,7 @@ import {
   Plus,
   QrCode,
   ReceiptText,
+  RefreshCw,
   ScanLine,
   Scissors,
   Search,
@@ -39,7 +40,7 @@ import QRCode from "qrcode";
 import { useRouter } from "next/navigation";
 import { createTranslator as createNextIntlTranslator, NextIntlClientProvider } from "next-intl";
 import { dashboardPathFor, isCustomer, isStoreOwner, isSuperAdmin, normalizeRole } from "@/lib/memberhub/access";
-import { getMessagesForLocale } from "@/lib/memberhub/i18n";
+import { defaultLocale, getMessagesForLocale, normalizeLocale } from "@/lib/memberhub/i18n";
 import { normalizeRoutePath } from "@/lib/memberhub/slug";
 import { subscriptionPlanLimits } from "@/lib/memberhub/subscriptionPlans";
 import { createTranslator, locales } from "@/messages/memberhub";
@@ -386,21 +387,23 @@ function currentPathMatchesUser(user, data) {
 }
 
 export function MemberHubApp() {
-  const [locale, setLocale] = useState("vi");
+  const [locale, setLocale] = useState(defaultLocale);
+  const [localeReady, setLocaleReady] = useState(false);
   const messages = useMemo(() => getMessagesForLocale(locale), [locale]);
 
   useEffect(() => {
-    setLocale(readStored("memberhub_locale", "vi"));
+    setLocale(normalizeLocale(readStored("memberhub_locale", defaultLocale)));
+    setLocaleReady(true);
   }, []);
 
   return (
     <NextIntlClientProvider locale={locale} messages={messages}>
-      <MemberHubAppContent locale={locale} setLocale={setLocale} />
+      <MemberHubAppContent locale={locale} localeReady={localeReady} setLocale={setLocale} />
     </NextIntlClientProvider>
   );
 }
 
-function MemberHubAppContent({ locale, setLocale }) {
+function MemberHubAppContent({ locale, localeReady, setLocale }) {
   const router = useRouter();
   const [token, setToken] = useState("");
   const [user, setUser] = useState(null);
@@ -413,6 +416,8 @@ function MemberHubAppContent({ locale, setLocale }) {
   const [avatarModalOpen, setAvatarModalOpen] = useState(false);
   const [theme, setTheme] = useState("light");
   const [toast, setToast] = useState("");
+  const [commandOpen, setCommandOpen] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const fallbackT = useMemo(() => createTranslator(locale), [locale]);
   const intlT = useMemo(() => {
@@ -450,7 +455,9 @@ function MemberHubAppContent({ locale, setLocale }) {
 
         setToken(savedToken);
         setUser(nextUser);
-        setLocale(isSuperAdmin(nextUser) ? "vi" : readStored("memberhub_locale", nextUser.locale || "vi"));
+        setLocale(isSuperAdmin(nextUser)
+          ? defaultLocale
+          : normalizeLocale(readStored("memberhub_locale", nextUser.locale || defaultLocale)));
         setView(isCustomer(nextUser) ? "cards" : "overview");
         setData(nextData);
       })
@@ -479,16 +486,29 @@ function MemberHubAppContent({ locale, setLocale }) {
   }, [theme]);
 
   useEffect(() => {
+    if (!localeReady) return;
     document.documentElement.lang = locale;
     localStorage.setItem("memberhub_locale", locale);
     document.cookie = `memberhub_locale=${locale}; path=/; max-age=31536000; samesite=lax`;
-  }, [locale]);
+  }, [locale, localeReady]);
 
   useEffect(() => {
     if (!toast) return;
     const timer = setTimeout(() => setToast(""), 2600);
     return () => clearTimeout(timer);
   }, [toast]);
+
+  useEffect(() => {
+    function handleShortcut(event) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setCommandOpen((open) => !open);
+      }
+    }
+
+    window.addEventListener("keydown", handleShortcut);
+    return () => window.removeEventListener("keydown", handleShortcut);
+  }, []);
 
   async function login(event) {
     event.preventDefault();
@@ -507,7 +527,7 @@ function MemberHubAppContent({ locale, setLocale }) {
 
       localStorage.setItem("memberhub_token", payload.token);
       const nextUser = { ...payload.user, role: normalizeRole(payload.user.role) };
-      const nextLocale = isSuperAdmin(nextUser) ? "vi" : nextUser.locale || locale;
+      const nextLocale = isSuperAdmin(nextUser) ? defaultLocale : normalizeLocale(locale);
       const nextData = await api("/api/app-data", payload.token);
 
       setToken(payload.token);
@@ -531,6 +551,19 @@ function MemberHubAppContent({ locale, setLocale }) {
     setData(null);
     setView("overview");
     router.replace("/");
+  }
+
+  async function refreshData() {
+    if (!token || refreshing) return;
+    setRefreshing(true);
+    try {
+      setData(await api("/api/app-data", token));
+      setToast(t("toast.refreshed"));
+    } catch (error) {
+      setToast(error.message || t("common.actionFailed"));
+    } finally {
+      setRefreshing(false);
+    }
   }
 
   async function changePassword({ currentPassword, newPassword }) {
@@ -601,6 +634,7 @@ function MemberHubAppContent({ locale, setLocale }) {
   }
 
   const items = navItems[normalizeRole(user.role)] || navItems.customer;
+  const unreadNotifications = (data?.notifications || []).filter((item) => item.status !== "read").length;
 
   return (
     <div className="mh-shell">
@@ -617,6 +651,11 @@ function MemberHubAppContent({ locale, setLocale }) {
             >
               <Icon size={18} aria-hidden="true" />
               <span>{t(labelKey)}</span>
+              {id === "notifications" && unreadNotifications > 0 ? (
+                <span className="mh-nav-count" aria-label={`${unreadNotifications} ${t("command.unread")}`}>
+                  {unreadNotifications > 99 ? "99+" : unreadNotifications}
+                </span>
+              ) : null}
             </button>
           ))}
         </nav>
@@ -629,6 +668,14 @@ function MemberHubAppContent({ locale, setLocale }) {
             <h1>{t(getViewTitleKey(view))}</h1>
           </div>
           <div className="mh-account">
+            <button className="mh-command-trigger" type="button" onClick={() => setCommandOpen(true)} title={t("command.open")}>
+              <Search size={17} aria-hidden="true" />
+              <span>{t("command.search")}</span>
+              <kbd>⌘ K</kbd>
+            </button>
+            <button className="mh-icon-toggle" disabled={refreshing} type="button" onClick={refreshData} title={t("command.refresh")}>
+              <RefreshCw className={refreshing ? "mh-spin" : ""} size={17} aria-hidden="true" />
+            </button>
             {isStoreOwner(user) || isCustomer(user) ? (
               <LanguageSwitcher locale={locale} setLocale={setLocale} t={t} />
             ) : null}
@@ -684,6 +731,70 @@ function MemberHubAppContent({ locale, setLocale }) {
         />
       ) : null}
       {toast ? <div className="mh-toast"><Check size={16} />{toast}</div> : null}
+      {commandOpen ? (
+        <CommandPalette
+          items={items}
+          onClose={() => setCommandOpen(false)}
+          onNavigate={(nextView) => {
+            setView(nextView);
+            setCommandOpen(false);
+          }}
+          t={t}
+          unreadNotifications={unreadNotifications}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function CommandPalette({ items, onClose, onNavigate, t, unreadNotifications }) {
+  const [query, setQuery] = useState("");
+  const inputRef = useRef(null);
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  const filteredItems = items.filter(([, labelKey]) => t(labelKey).toLocaleLowerCase().includes(normalizedQuery));
+
+  useEffect(() => {
+    inputRef.current?.focus();
+    function handleKeyDown(event) {
+      if (event.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
+  return (
+    <div className="mh-command-backdrop" role="presentation" onMouseDown={(event) => {
+      if (event.target === event.currentTarget) onClose();
+    }}>
+      <section className="mh-command" role="dialog" aria-modal="true" aria-label={t("command.title")}>
+        <div className="mh-command-search">
+          <Search size={19} aria-hidden="true" />
+          <input
+            ref={inputRef}
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && filteredItems[0]) onNavigate(filteredItems[0][0]);
+            }}
+            placeholder={t("command.placeholder")}
+            aria-label={t("command.search")}
+          />
+          <kbd>ESC</kbd>
+        </div>
+        <div className="mh-command-list">
+          <p>{t("command.navigate")}</p>
+          {filteredItems.map(([id, labelKey, Icon]) => (
+            <button key={id} type="button" onClick={() => onNavigate(id)}>
+              <span><Icon size={18} aria-hidden="true" />{t(labelKey)}</span>
+              {id === "notifications" && unreadNotifications > 0
+                ? <strong>{unreadNotifications}</strong>
+                : <ChevronRight size={16} aria-hidden="true" />}
+            </button>
+          ))}
+          {!filteredItems.length ? <div className="mh-command-empty">{t("command.empty")}</div> : null}
+        </div>
+        <footer><span>↑↓ {t("command.move")}</span><span>↵ {t("command.select")}</span></footer>
+      </section>
     </div>
   );
 }
@@ -846,6 +957,11 @@ function Overview({ data, t, user }) {
     return { transactions, customers, shops, revenue, points, newCustomers, topServices, activeShops, expiringShops, expiredShops, alerts, currentShop, revenueToday, revenueWeek, revenueMonth, pendingRequests, upcomingRequests };
   }, [data, user]);
 
+  const customerInsights = useMemo(
+    () => buildCustomerInsights(transactions, customers),
+    [transactions, customers]
+  );
+
   return (
     <>
       <div className="mh-stats">
@@ -918,6 +1034,8 @@ function Overview({ data, t, user }) {
         </div>
       ) : null}
 
+      {isStoreOwner(user) ? <CustomerInsights insights={customerInsights} t={t} /> : null}
+
       <section className="mh-card mh-chart-card">
         <PanelTitle icon={FileText} title={t("dashboard.topServices")} />
         <BarChart rows={topServices} />
@@ -935,6 +1053,43 @@ function Overview({ data, t, user }) {
         />
       </section>
     </>
+  );
+}
+
+function CustomerInsights({ insights, t }) {
+  const { activeLast30Days, averageOrderValue, repeatRate, rankedCustomers } = insights;
+
+  return (
+    <section className="mh-card mh-customer-insights">
+      <div className="mh-insights-heading">
+        <PanelTitle icon={UserRound} title={t("dashboard.customerInsights")} />
+        <p>{t("dashboard.customerInsightsCopy")}</p>
+      </div>
+
+      <div className="mh-insight-metrics">
+        <div><span>{t("dashboard.averageOrder")}</span><strong>{money(averageOrderValue)}</strong></div>
+        <div><span>{t("dashboard.repeatRate")}</span><strong>{repeatRate}%</strong></div>
+        <div><span>{t("dashboard.activeCustomers30")}</span><strong>{activeLast30Days}</strong></div>
+        <div><span>{t("dashboard.knownCustomers")}</span><strong>{rankedCustomers.length}</strong></div>
+      </div>
+
+      <div className="mh-customer-ranking" role="list" aria-label={t("dashboard.topCustomersBySpend")}>
+        {rankedCustomers.slice(0, 5).map((customer, index) => (
+          <article className={index === 0 ? "is-leader" : ""} key={customer.key} role="listitem">
+            <div className="mh-rank-number">{String(index + 1).padStart(2, "0")}</div>
+            <div className="mh-rank-customer">
+              <strong>{customer.name}</strong>
+              <span>{customer.favoriteService || t("common.empty")}</span>
+            </div>
+            <div className="mh-rank-detail"><span>{t("dashboard.serviceUses")}</span><strong>{customer.visits}</strong></div>
+            <div className="mh-rank-detail"><span>{t("dashboard.pointsEarned")}</span><strong>{customer.points.toLocaleString("vi-VN")}</strong></div>
+            <div className="mh-rank-detail"><span>{t("dashboard.lastVisit")}</span><strong>{dateText(customer.lastVisit)}</strong></div>
+            <div className="mh-rank-spend"><span>{t("dashboard.totalSpent")}</span><strong>{money(customer.totalSpend)}</strong></div>
+          </article>
+        ))}
+        {!rankedCustomers.length ? <div className="mh-insights-empty">{t("dashboard.noCustomerInsights")}</div> : null}
+      </div>
+    </section>
   );
 }
 
@@ -3033,6 +3188,53 @@ function rankBy(rows, labelKey, valueKey) {
     map.set(label, (map.get(label) || 0) + Number(row[valueKey] || 0));
   });
   return [...map.entries()].map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value);
+}
+
+function buildCustomerInsights(transactions, customers) {
+  const customerById = new Map(customers.map((customer) => [String(customer.id), customer]));
+  const customerMap = new Map();
+
+  transactions.forEach((transaction) => {
+    const customerId = transaction.customer_id == null ? "" : String(transaction.customer_id);
+    const key = customerId || `name:${transaction.customer_name || "-"}`;
+    const profile = customerById.get(customerId);
+    const current = customerMap.get(key) || {
+      key,
+      name: transaction.customer_name || profile?.name || "-",
+      totalSpend: 0,
+      visits: 0,
+      points: 0,
+      lastVisit: null,
+      services: new Map()
+    };
+    const serviceName = transaction.service_name || "";
+    const createdAt = transaction.created_at ? new Date(transaction.created_at).getTime() : 0;
+
+    current.totalSpend += Number(transaction.amount || 0);
+    current.visits += 1;
+    current.points += Number(transaction.points_delta || 0);
+    if (createdAt > Number(current.lastVisit || 0)) current.lastVisit = createdAt;
+    if (serviceName) current.services.set(serviceName, (current.services.get(serviceName) || 0) + 1);
+    customerMap.set(key, current);
+  });
+
+  const rankedCustomers = [...customerMap.values()]
+    .map((customer) => ({
+      ...customer,
+      favoriteService: [...customer.services.entries()].sort((left, right) => right[1] - left[1])[0]?.[0] || ""
+    }))
+    .sort((left, right) => right.totalSpend - left.totalSpend || right.visits - left.visits);
+  const activeThreshold = Date.now() - 30 * 24 * 60 * 60 * 1000;
+  const repeatCustomers = rankedCustomers.filter((customer) => customer.visits > 1).length;
+
+  return {
+    rankedCustomers,
+    averageOrderValue: transactions.length
+      ? transactions.reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0) / transactions.length
+      : 0,
+    repeatRate: rankedCustomers.length ? Math.round((repeatCustomers / rankedCustomers.length) * 100) : 0,
+    activeLast30Days: rankedCustomers.filter((customer) => Number(customer.lastVisit || 0) >= activeThreshold).length
+  };
 }
 
 function sumRecent(rows, days) {
