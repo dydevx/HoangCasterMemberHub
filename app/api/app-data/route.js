@@ -4,7 +4,6 @@ import { routePathFor, routeSlug } from "@/lib/memberhub/slug";
 import { createSupabaseServerClient } from "@/lib/supabaseServer";
 import { NextResponse } from "next/server";
 
-const memberUserPresenceSelect = "id,name,email,role,status,phone,locale,avatar_url,last_seen_at,created_at";
 const memberUserSelect = "id,name,email,role,status,phone,locale,avatar_url,created_at";
 const memberUserFallbackSelect = "id,name,email,role,status,phone,locale,created_at";
 
@@ -57,12 +56,6 @@ async function readWhereIn(supabase, table, column, values, select = "*") {
 }
 
 async function readAllMemberUsers(supabase) {
-  const presenceResult = await supabase.from("member_users").select(memberUserPresenceSelect);
-  if (!missingColumn(presenceResult.error, "last_seen_at")) {
-    if (presenceResult.error) throw presenceResult.error;
-    return presenceResult.data || [];
-  }
-
   const result = await supabase.from("member_users").select(memberUserSelect);
   if (missingColumn(result.error, "avatar_url")) {
     return readAll(supabase, "member_users", memberUserFallbackSelect);
@@ -75,12 +68,6 @@ async function readAllMemberUsers(supabase) {
 async function readMemberUsersWhereIn(supabase, column, values) {
   const list = [...new Set((values || []).filter((value) => value !== null && value !== undefined))];
   if (!list.length) return [];
-
-  const presenceResult = await supabase.from("member_users").select(memberUserPresenceSelect).in(column, list);
-  if (!missingColumn(presenceResult.error, "last_seen_at")) {
-    if (presenceResult.error) throw presenceResult.error;
-    return presenceResult.data || [];
-  }
 
   const result = await supabase.from("member_users").select(memberUserSelect).in(column, list);
   if (missingColumn(result.error, "avatar_url")) {
@@ -323,9 +310,6 @@ function shapeData(data) {
     users: data.users.map((user) => ({ ...user, role: normalizeRole(user.role) })),
     customers: data.customers.map((customer) => ({
       ...customer,
-      last_seen_at: userMap.get(customer.user_id)?.last_seen_at || null,
-      is_online: Boolean(userMap.get(customer.user_id)?.last_seen_at) &&
-        Date.now() - new Date(userMap.get(customer.user_id).last_seen_at).getTime() < 45_000,
       slug: routeSlug(customer),
       shop_name: shopMap.get(customer.shop_id)?.name || "",
       shop_slug: routeSlug(shopMap.get(customer.shop_id)),

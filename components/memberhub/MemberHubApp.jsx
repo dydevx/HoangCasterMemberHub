@@ -420,6 +420,7 @@ function MemberHubAppContent({ locale, localeReady, setLocale }) {
   const [commandOpen, setCommandOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [realtimeStatus, setRealtimeStatus] = useState("polling");
+  const [onlineCustomerUserIds, setOnlineCustomerUserIds] = useState([]);
   const realtimeRefreshRef = useRef(false);
 
   const fallbackT = useMemo(() => createTranslator(locale), [locale]);
@@ -542,7 +543,6 @@ function MemberHubAppContent({ locale, localeReady, setLocale }) {
       .on("postgres_changes", { event: "*", schema: "public", table: "notifications" }, scheduleRealtimeSync)
       .on("postgres_changes", { event: "*", schema: "public", table: "service_requests" }, scheduleRealtimeSync)
       .on("postgres_changes", { event: "*", schema: "public", table: "transactions" }, scheduleRealtimeSync)
-      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "member_users" }, scheduleRealtimeSync)
       .subscribe((status) => {
         if (!active) return;
         setRealtimeStatus(status === "SUBSCRIBED" ? "connected" : "polling");
@@ -564,25 +564,46 @@ function MemberHubAppContent({ locale, localeReady, setLocale }) {
   }, [token, user?.id]);
 
   useEffect(() => {
-    if (!token || !user) return;
-    let active = true;
-    const heartbeat = () => {
-      if (!active || document.visibilityState === "hidden") return;
-      api("/api/presence", token, { method: "POST" }).catch(() => {});
-    };
-    const handleVisibility = () => {
-      if (document.visibilityState === "visible") heartbeat();
+    if (!supabaseClient || !token || !user || !data) return;
+    if (!isStoreOwner(user) && !isCustomer(user)) return;
+
+    const shopIds = [...new Set((data.shops || []).map((shop) => Number(shop.id)).filter(Boolean))];
+    if (!shopIds.length) return;
+
+    const channels = [];
+    const presenceKey = `${user.id}-${crypto.randomUUID()}`;
+    const syncOwnerPresence = () => {
+      if (!isStoreOwner(user)) return;
+      const ids = new Set();
+      channels.forEach((channel) => {
+        Object.values(channel.presenceState()).flat().forEach((presence) => {
+          if (presence.role === "customer" && presence.user_id) ids.add(Number(presence.user_id));
+        });
+      });
+      setOnlineCustomerUserIds([...ids]);
     };
 
-    heartbeat();
-    const timer = setInterval(heartbeat, 15_000);
-    document.addEventListener("visibilitychange", handleVisibility);
+    shopIds.forEach((shopId) => {
+      const channel = supabaseClient.channel(`memberhub-presence-shop-${shopId}`, {
+        config: { presence: { key: presenceKey } }
+      });
+      channels.push(channel);
+      channel
+        .on("presence", { event: "sync" }, syncOwnerPresence)
+        .on("presence", { event: "join" }, syncOwnerPresence)
+        .on("presence", { event: "leave" }, syncOwnerPresence)
+        .subscribe(async (status) => {
+          if (status === "SUBSCRIBED" && isCustomer(user)) {
+            await channel.track({ user_id: Number(user.id), role: "customer", online_at: new Date().toISOString() });
+          }
+        });
+    });
+
     return () => {
-      active = false;
-      clearInterval(timer);
-      document.removeEventListener("visibilitychange", handleVisibility);
+      channels.forEach((channel) => supabaseClient.removeChannel(channel));
+      setOnlineCustomerUserIds([]);
     };
-  }, [token, user?.id]);
+  }, [token, user?.id, data?.shops]);
 
   async function login(event) {
     event.preventDefault();
@@ -618,7 +639,6 @@ function MemberHubAppContent({ locale, localeReady, setLocale }) {
   }
 
   function logout() {
-    api("/api/presence", token, { method: "DELETE", keepalive: true }).catch(() => {});
     bootstrapRequests.delete(token);
     localStorage.removeItem("memberhub_token");
     setToken("");
@@ -710,6 +730,7 @@ function MemberHubAppContent({ locale, localeReady, setLocale }) {
 
   const items = navItems[normalizeRole(user.role)] || navItems.customer;
   const unreadNotifications = (data?.notifications || []).filter((item) => item.status !== "read").length;
+  const presenceData = { ...data, onlineCustomerUserIds };
 
   return (
     <div className="mh-shell">
@@ -786,7 +807,7 @@ function MemberHubAppContent({ locale, localeReady, setLocale }) {
               deleteLocalRow={deleteLocalRow}
               toggleLockRow={toggleLockRow}
               updateLocalRow={updateLocalRow}
-              data={data}
+              data={presenceData}
               t={t}
               user={user}
               view={view}
@@ -3072,12 +3093,14 @@ function getColumns(view, t, data = {}) {
     ],
     customers: [
       { key: "name", label: t("customer.name") },
-      { key: "is_online", label: t("presence.label"), render: (row) => (
-        <span className={`mh-presence ${row.is_online ? "online" : "offline"}`}>
+      { key: "is_online", label: t("presence.label"), render: (row) => {
+        const isOnline = (data.onlineCustomerUserIds || []).includes(Number(row.user_id));
+        return (
+        <span className={`mh-presence ${isOnline ? "online" : "offline"}`}>
           <span aria-hidden="true" />
-          {row.is_online ? t("presence.online") : t("presence.offline")}
+          {isOnline ? t("presence.online") : t("presence.offline")}
         </span>
-      ) },
+      ); } },
       linkColumn("customer_url", t("common.link")),
       { key: "shop_name", label: t("shop.name") },
       { key: "email", label: t("customer.email") },
