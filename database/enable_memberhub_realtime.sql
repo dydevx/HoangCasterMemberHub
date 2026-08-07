@@ -9,7 +9,7 @@ begin
     raise exception 'Supabase Realtime publication does not exist in this project.';
   end if;
 
-  foreach target_table in array array['notifications', 'service_requests', 'transactions']
+  foreach target_table in array array['notifications', 'service_requests', 'transactions', 'membership_cards']
   loop
     if to_regclass('public.' || target_table) is not null
       and not exists (

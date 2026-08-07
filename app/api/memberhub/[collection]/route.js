@@ -415,7 +415,18 @@ async function createTransactionForServiceRequest(supabase, request) {
     .maybeSingle();
 
   if (existingError) throw existingError;
-  if (existing) return existing;
+  if (existing) {
+    const { count, error: historyError } = await supabase
+      .from("point_histories")
+      .select("id", { count: "exact", head: true })
+      .eq("transaction_id", existing.id);
+
+    // Legacy requests may already have a transaction but no card update. Apply it once.
+    if (!historyError && Number(count || 0) === 0) {
+      await applyTransactionToCard(supabase, existing);
+    }
+    return existing;
+  }
 
   const { data: service, error: serviceError } = await supabase
     .from("services")

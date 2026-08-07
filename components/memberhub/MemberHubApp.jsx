@@ -517,6 +517,7 @@ function MemberHubAppContent({ locale, localeReady, setLocale }) {
     if (!token || !user) return;
     let active = true;
     let debounceTimer = null;
+    let followUpTimer = null;
 
     async function syncLatestData(source = "polling") {
       if (!active || realtimeRefreshRef.current || document.visibilityState === "hidden") return;
@@ -535,7 +536,10 @@ function MemberHubAppContent({ locale, localeReady, setLocale }) {
 
     function scheduleRealtimeSync() {
       clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(() => syncLatestData("realtime"), 350);
+      clearTimeout(followUpTimer);
+      debounceTimer = setTimeout(() => syncLatestData("realtime"), 300);
+      // Transaction and request events can arrive just before the related card update.
+      followUpTimer = setTimeout(() => syncLatestData("realtime"), 1400);
     }
 
     const channel = supabaseClient
@@ -543,6 +547,7 @@ function MemberHubAppContent({ locale, localeReady, setLocale }) {
       .on("postgres_changes", { event: "*", schema: "public", table: "notifications" }, scheduleRealtimeSync)
       .on("postgres_changes", { event: "*", schema: "public", table: "service_requests" }, scheduleRealtimeSync)
       .on("postgres_changes", { event: "*", schema: "public", table: "transactions" }, scheduleRealtimeSync)
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "membership_cards" }, scheduleRealtimeSync)
       .subscribe((status) => {
         if (!active) return;
         setRealtimeStatus(status === "SUBSCRIBED" ? "connected" : "polling");
@@ -557,6 +562,7 @@ function MemberHubAppContent({ locale, localeReady, setLocale }) {
     return () => {
       active = false;
       clearTimeout(debounceTimer);
+      clearTimeout(followUpTimer);
       clearInterval(pollTimer);
       document.removeEventListener("visibilitychange", handleVisibility);
       if (channel) supabaseClient?.removeChannel(channel);
