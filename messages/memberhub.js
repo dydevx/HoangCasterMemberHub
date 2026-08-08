@@ -1,4 +1,4 @@
-export const locales = [
+const availableLocales = [
   { id: "en", label: "English" },
   { id: "fr", label: "Français" },
   { id: "de", label: "Deutsch" },
@@ -41,6 +41,9 @@ export const locales = [
   { id: "ar", label: "العربية", dir: "rtl" },
   { id: "vi", label: "Tiếng Việt" }
 ];
+
+// Only expose languages with complete dictionaries in the UI.
+export const locales = availableLocales.filter(({ id }) => id === "en" || id === "vi");
 
 const en = {
   "app.name": "MemberHub",
