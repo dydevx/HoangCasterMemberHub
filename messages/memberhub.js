@@ -1,3 +1,5 @@
+import generatedDictionaries from "./memberhub-locales.json";
+
 const availableLocales = [
   { id: "en", label: "English" },
   { id: "fr", label: "Français" },
@@ -43,7 +45,7 @@ const availableLocales = [
 ];
 
 // Only expose languages with complete dictionaries in the UI.
-export const locales = availableLocales.filter(({ id }) => id === "en" || id === "vi");
+export const locales = availableLocales;
 
 const en = {
   "app.name": "MemberHub",
@@ -609,7 +611,19 @@ const vi = {
   "toast.refreshed": "Dữ liệu đã được cập nhật.",
   "toast.avatarChanged": "Đã cập nhật ảnh đại diện.",
   "toast.deleted": "Đã xóa bản ghi.",
-  "error.noSupabase": "Chưa cấu hình Supabase. Ứng dụng đang chạy bằng dữ liệu demo."
+  "error.noSupabase": "Chưa cấu hình Supabase. Ứng dụng đang chạy bằng dữ liệu demo.",
+  "app.name": "MemberHub",
+  "dashboard.subscriptionAlerts": "Cảnh báo gói đăng ký",
+  "dashboard.expiringNotice": "Gói của bạn còn {days} ngày. Vui lòng liên hệ quản trị viên để gia hạn.",
+  "dashboard.expiredNotice": "Gói của bạn đã hết hạn. Vui lòng liên hệ quản trị viên để tiếp tục sử dụng.",
+  "transaction.code": "Mã giao dịch",
+  "card.secureToken": "Mã bảo mật",
+  "customers.list": "Danh sách khách hàng",
+  "customers.levels": "Hạng thành viên",
+  "customers.transactions": "Giao dịch khách hàng",
+  "customers.addCustomer": "Thêm khách hàng",
+  "customers.scanQr": "Quét mã QR",
+  "transactions.record": "Ghi nhận giao dịch"
 };
 
 const localizedNames = {
@@ -671,8 +685,8 @@ function makeDictionary(items) {
 
 export const dictionaries = {
   en,
-  vi,
-  ...Object.fromEntries(Object.entries(localizedNames).map(([id, items]) => [id, makeDictionary(items)]))
+  vi: { ...en, ...vi },
+  ...generatedDictionaries
 };
 
 export function createTranslator(locale) {
