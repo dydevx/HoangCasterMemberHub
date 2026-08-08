@@ -460,7 +460,10 @@ function MemberHubAppContent({ locale, localeReady, setLocale }) {
         setToken(savedToken);
         setUser(nextUser);
         setLocale(normalizeLocale(readStored("memberhub_locale", nextUser.locale || defaultLocale)));
-        setView(isCustomer(nextUser) ? "cards" : "overview");
+        const availableViews = (navItems[normalizeRole(nextUser.role)] || navItems.customer).map(([id]) => id);
+        const defaultView = isCustomer(nextUser) ? "cards" : "overview";
+        const savedView = readStored(`memberhub_last_view_${normalizeRole(nextUser.role)}`, defaultView);
+        setView(availableViews.includes(savedView) ? savedView : defaultView);
         setData(nextData);
       })
       .catch((error) => {
@@ -486,6 +489,11 @@ function MemberHubAppContent({ locale, localeReady, setLocale }) {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem("memberhub_theme", theme);
   }, [theme]);
+
+  useEffect(() => {
+    if (!user) return;
+    localStorage.setItem(`memberhub_last_view_${normalizeRole(user.role)}`, view);
+  }, [user, view]);
 
   useEffect(() => {
     if (!localeReady) return;
@@ -634,7 +642,10 @@ function MemberHubAppContent({ locale, localeReady, setLocale }) {
       setToken(payload.token);
       setUser(nextUser);
       setLocale(nextLocale);
-      setView(isCustomer(nextUser) ? "cards" : "overview");
+      const availableViews = (navItems[normalizeRole(nextUser.role)] || navItems.customer).map(([id]) => id);
+      const defaultView = isCustomer(nextUser) ? "cards" : "overview";
+      const savedView = readStored(`memberhub_last_view_${normalizeRole(nextUser.role)}`, defaultView);
+      setView(availableViews.includes(savedView) ? savedView : defaultView);
       setData(nextData);
       router.replace(dashboardPathFor(nextUser, nextData));
     } catch (error) {
@@ -737,6 +748,9 @@ function MemberHubAppContent({ locale, localeReady, setLocale }) {
   const items = navItems[normalizeRole(user.role)] || navItems.customer;
   const unreadNotifications = (data?.notifications || []).filter((item) => item.status !== "read").length;
   const presenceData = { ...data, onlineCustomerUserIds };
+  const navigateTo = (nextView) => {
+    if (items.some(([id]) => id === nextView)) setView(nextView);
+  };
 
   return (
     <div className="mh-shell">
@@ -751,7 +765,7 @@ function MemberHubAppContent({ locale, localeReady, setLocale }) {
             <button
               className={view === id ? "active" : ""}
               key={id}
-              onClick={() => setView(id)}
+              onClick={() => navigateTo(id)}
               type="button"
               title={t(labelKey)}
             >
@@ -814,6 +828,7 @@ function MemberHubAppContent({ locale, localeReady, setLocale }) {
               toggleLockRow={toggleLockRow}
               updateLocalRow={updateLocalRow}
               data={presenceData}
+              onNavigate={navigateTo}
               t={t}
               user={user}
               view={view}
@@ -847,7 +862,7 @@ function MemberHubAppContent({ locale, localeReady, setLocale }) {
           items={items}
           onClose={() => setCommandOpen(false)}
           onNavigate={(nextView) => {
-            setView(nextView);
+            navigateTo(nextView);
             setCommandOpen(false);
           }}
           t={t}
@@ -860,11 +875,18 @@ function MemberHubAppContent({ locale, localeReady, setLocale }) {
 
 function CommandPalette({ data, items, onClose, onNavigate, t, unreadNotifications }) {
   const [query, setQuery] = useState("");
+  const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef(null);
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const filteredItems = items.filter(([, labelKey]) => t(labelKey).toLocaleLowerCase().includes(normalizedQuery));
   const searchResults = useMemo(() => buildGlobalSearchResults(data, normalizedQuery, t), [data, normalizedQuery, t]);
-  const firstDestination = searchResults[0]?.view || filteredItems[0]?.[0];
+  const destinations = normalizedQuery
+    ? [...filteredItems.map(([id]) => id), ...searchResults.map((result) => result.view)]
+    : items.map(([id]) => id);
+
+  useEffect(() => {
+    setActiveIndex(0);
+  }, [normalizedQuery]);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -887,10 +909,19 @@ function CommandPalette({ data, items, onClose, onNavigate, t, unreadNotificatio
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={(event) => {
-              if (event.key === "Enter" && firstDestination) onNavigate(firstDestination);
+              if (event.key === "ArrowDown") {
+                event.preventDefault();
+                setActiveIndex((index) => destinations.length ? (index + 1) % destinations.length : 0);
+              }
+              if (event.key === "ArrowUp") {
+                event.preventDefault();
+                setActiveIndex((index) => destinations.length ? (index - 1 + destinations.length) % destinations.length : 0);
+              }
+              if (event.key === "Enter" && destinations[activeIndex]) onNavigate(destinations[activeIndex]);
             }}
             placeholder={t("command.placeholder")}
             aria-label={t("command.search")}
+            aria-activedescendant={destinations[activeIndex] ? `command-option-${activeIndex}` : undefined}
           />
           <kbd>ESC</kbd>
         </div>
@@ -898,8 +929,8 @@ function CommandPalette({ data, items, onClose, onNavigate, t, unreadNotificatio
           {!normalizedQuery ? (
             <>
               <p>{t("command.navigate")}</p>
-              {items.map(([id, labelKey, Icon]) => (
-                <button key={id} type="button" onClick={() => onNavigate(id)}>
+              {items.map(([id, labelKey, Icon], index) => (
+                <button className={activeIndex === index ? "is-active" : ""} id={`command-option-${index}`} key={id} type="button" onMouseEnter={() => setActiveIndex(index)} onClick={() => onNavigate(id)}>
                   <span><Icon size={18} aria-hidden="true" />{t(labelKey)}</span>
                   {id === "notifications" && unreadNotifications > 0
                     ? <strong>{unreadNotifications}</strong>
@@ -910,22 +941,25 @@ function CommandPalette({ data, items, onClose, onNavigate, t, unreadNotificatio
           ) : (
             <>
               {filteredItems.length ? <p>{t("command.workspaces")}</p> : null}
-              {filteredItems.map(([id, labelKey, Icon]) => (
-                <button key={`view:${id}`} type="button" onClick={() => onNavigate(id)}>
+              {filteredItems.map(([id, labelKey, Icon], index) => (
+                <button className={activeIndex === index ? "is-active" : ""} id={`command-option-${index}`} key={`view:${id}`} type="button" onMouseEnter={() => setActiveIndex(index)} onClick={() => onNavigate(id)}>
                   <span><Icon size={18} aria-hidden="true" />{t(labelKey)}</span>
                   <ChevronRight size={16} aria-hidden="true" />
                 </button>
               ))}
               {searchResults.length ? <p>{t("command.dataResults")}</p> : null}
-              {searchResults.map((result) => (
-                <button className="mh-command-result" key={result.key} type="button" onClick={() => onNavigate(result.view)}>
+              {searchResults.map((result, index) => {
+                const resultIndex = filteredItems.length + index;
+                return (
+                <button className={`mh-command-result ${activeIndex === resultIndex ? "is-active" : ""}`} id={`command-option-${resultIndex}`} key={result.key} type="button" onMouseEnter={() => setActiveIndex(resultIndex)} onClick={() => onNavigate(result.view)}>
                   <span>
                     <result.Icon size={18} aria-hidden="true" />
                     <span><b>{result.title}</b><small>{result.subtitle}</small></span>
                   </span>
                   <em>{result.kind}</em>
                 </button>
-              ))}
+                );
+              })}
               {!filteredItems.length && !searchResults.length ? <div className="mh-command-empty">{t("command.empty")}</div> : null}
             </>
           )}
@@ -1006,8 +1040,8 @@ function LogoMark({ alt = "", src = "" }) {
   );
 }
 
-function DashboardView({ addLocalRow, deleteLocalRow, toggleLockRow, updateLocalRow, view, user, data, t, onChangeAvatar }) {
-  if (view === "overview") return <Overview data={data} t={t} user={user} />;
+function DashboardView({ addLocalRow, deleteLocalRow, toggleLockRow, updateLocalRow, view, user, data, t, onChangeAvatar, onNavigate }) {
+  if (view === "overview") return <Overview data={data} onNavigate={onNavigate} t={t} user={user} />;
   if (view === "reports") return <Reports data={data} t={t} />;
   if (view === "scan") return <ScanView addLocalRow={addLocalRow} data={data} t={t} />;
   if (view === "profile") return <Profile data={data} onChangeAvatar={onChangeAvatar} t={t} updateLocalRow={updateLocalRow} user={user} />;
@@ -1050,7 +1084,7 @@ function DashboardView({ addLocalRow, deleteLocalRow, toggleLockRow, updateLocal
   );
 }
 
-function Overview({ data, t, user }) {
+function Overview({ data, onNavigate, t, user }) {
   const {
     transactions,
     customers,
@@ -1120,6 +1154,25 @@ function Overview({ data, t, user }) {
 
   return (
     <>
+      <section className="mh-dashboard-intro">
+        <div>
+          <span>{t("dashboard.workspaceReady")}</span>
+          <h2>{t("dashboard.welcomeBack").replace("{name}", displayAccountName(user, t))}</h2>
+          <p>{t("dashboard.quickActionsCopy")}</p>
+        </div>
+        <div className="mh-quick-actions" aria-label={t("dashboard.quickActions")}>
+          {(isSuperAdmin(user)
+            ? [["shops", Building2, "nav.shops"], ["reports", FileText, "nav.reports"], ["notifications", Bell, "nav.notifications"]]
+            : [["customers", UserRound, "nav.customers"], ["requests", ReceiptText, "nav.serviceRequests"], ["reports", FileText, "nav.reports"]]
+          ).map(([target, Icon, label]) => (
+            <button key={target} type="button" onClick={() => onNavigate(target)}>
+              <Icon size={18} aria-hidden="true" />
+              <span>{t(label)}</span>
+              <ChevronRight size={15} aria-hidden="true" />
+            </button>
+          ))}
+        </div>
+      </section>
       <div className="mh-stats">
         {isSuperAdmin(user) ? (
           <>
