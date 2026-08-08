@@ -1410,19 +1410,27 @@ function CustomersWorkspace({ addLocalRow, data, deleteLocalRow, t, toggleLockRo
         />
       ) : null}
       {tab === "levels" ? (
-        <ResourceTable
-          addLocalRow={addLocalRow}
-          canWrite
-          collection="levels"
-          columns={getColumns("levels", t, data)}
-          data={data}
-          deleteLocalRow={deleteLocalRow}
-          rows={data.levels}
-          t={t}
-          toggleLockRow={toggleLockRow}
-          updateLocalRow={updateLocalRow}
-          view="levels"
-        />
+        <>
+          <MembershipLevelSettings
+            addLocalRow={addLocalRow}
+            data={data}
+            t={t}
+            updateLocalRow={updateLocalRow}
+          />
+          <ResourceTable
+            addLocalRow={addLocalRow}
+            canWrite
+            collection="levels"
+            columns={getColumns("levels", t, data)}
+            data={data}
+            deleteLocalRow={deleteLocalRow}
+            rows={data.levels}
+            t={t}
+            toggleLockRow={toggleLockRow}
+            updateLocalRow={updateLocalRow}
+            view="levels"
+          />
+        </>
       ) : null}
       {tab === "transactions" ? (
         <ResourceTable
@@ -1440,6 +1448,78 @@ function CustomersWorkspace({ addLocalRow, data, deleteLocalRow, t, toggleLockRo
       ) : null}
       {tab === "scan" ? <ScanView addLocalRow={addLocalRow} data={data} t={t} /> : null}
     </div>
+  );
+}
+
+function MembershipLevelSettings({ addLocalRow, data, t, updateLocalRow }) {
+  const tierModeSetting = (data.settings || []).find((item) => item.key === "membership_tier_mode");
+  const pointsSetting = (data.settings || []).find((item) => item.key === "points_vnd_per_point");
+  const [tierMode, setTierMode] = useState(tierModeSetting?.value || "both");
+  const [vndPerPoint, setVndPerPoint] = useState(pointsSetting?.value || "10000");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => setTierMode(tierModeSetting?.value || "both"), [tierModeSetting?.value]);
+  useEffect(() => setVndPerPoint(pointsSetting?.value || "10000"), [pointsSetting?.value]);
+
+  async function saveSetting(existing, key, value) {
+    const row = { id: existing?.id, shop_id: existing?.shop_id || data.shops?.[0]?.id, key, value: String(value) };
+    if (existing?.id) return updateLocalRow("settings", row);
+    return addLocalRow("settings", row);
+  }
+
+  async function savePolicy() {
+    setSaving(true);
+    try {
+      await saveSetting(tierModeSetting, "membership_tier_mode", tierMode);
+      await saveSetting(pointsSetting, "points_vnd_per_point", Math.max(1, Number(vndPerPoint || 10000)));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const activeLevels = [...(data.levels || [])]
+    .filter((level) => level.status === "active")
+    .sort((left, right) => Number(left.sort_order || 0) - Number(right.sort_order || 0));
+
+  return (
+    <section className="mh-card mh-level-policy">
+      <div className="mh-level-policy-heading">
+        <PanelTitle icon={Sparkles} title={t("level.policyTitle")} />
+        <p>{t("level.policyCopy")}</p>
+      </div>
+      <div className="mh-level-policy-grid">
+        <label>
+          <span>{t("level.qualificationMode")}</span>
+          <select value={tierMode} onChange={(event) => setTierMode(event.target.value)}>
+            <option value="both">{t("level.modeBoth")}</option>
+            <option value="either">{t("level.modeEither")}</option>
+            <option value="points">{t("level.modePoints")}</option>
+            <option value="spend">{t("level.modeSpend")}</option>
+          </select>
+        </label>
+        <label>
+          <span>{t("level.pointConversion")}</span>
+          <div className="mh-level-point-input">
+            <input min="1" step="1000" type="number" value={vndPerPoint} onChange={(event) => setVndPerPoint(event.target.value)} />
+            <small>VND / 1 {t("common.points")}</small>
+          </div>
+        </label>
+        <button className="mh-primary slim" disabled={saving} type="button" onClick={savePolicy}>
+          {saving ? <Loader2 className="mh-spin" size={17} /> : <Check size={17} />}
+          {t("level.savePolicy")}
+        </button>
+      </div>
+      <div className="mh-level-preview" aria-label={t("level.activeLevels")}>
+        {activeLevels.map((level) => (
+          <article key={level.id} style={{ "--level-color": level.color || "var(--mh-brand)" }}>
+            <span>{level.name}</span>
+            <strong>{Number(level.earn_rate || 1)}x</strong>
+            <small>{Number(level.discount_percent || 0)}% {t("level.discount")}</small>
+          </article>
+        ))}
+        {!activeLevels.length ? <p>{t("level.emptyPolicy")}</p> : null}
+      </div>
+    </section>
   );
 }
 
@@ -3188,6 +3268,7 @@ function getColumns(view, t, data = {}) {
       { key: "name", label: t("level.name") },
       { key: "shop_name", label: t("shop.name") },
       { key: "min_points", label: t("level.condition"), render: (row) => `${row.min_points || 0} pts / ${money(row.min_spend)}` },
+      { key: "earn_rate", label: t("level.earnRate"), render: (row) => `${row.earn_rate || 1}x` },
       { key: "discount_percent", label: t("level.discount"), render: (row) => `${row.discount_percent || 0}%` },
       { key: "benefits", label: t("level.benefits") },
       statusColumn
@@ -3363,10 +3444,13 @@ function getEditableFields(view, t, data = {}) {
     ],
     levels: [
       { key: "shop_id", label: t("shop.name"), type: "number", options: shopOptions },
-      { key: "name", label: t("level.name") },
-      { key: "min_points", label: t("common.points"), type: "number" },
-      { key: "min_spend", label: t("card.spend"), type: "number" },
-      { key: "discount_percent", label: t("level.discount"), type: "number" },
+      { key: "name", label: t("level.name"), required: true },
+      { key: "color", label: t("level.color"), type: "color", defaultValue: "#2563eb" },
+      { key: "min_points", label: t("common.points"), type: "number", min: "0", defaultValue: "0" },
+      { key: "min_spend", label: t("card.spend"), type: "number", min: "0", defaultValue: "0" },
+      { key: "earn_rate", label: t("level.earnRate"), type: "number", min: "1", max: "20", defaultValue: "1" },
+      { key: "discount_percent", label: t("level.discount"), type: "number", min: "0", max: "100", defaultValue: "0" },
+      { key: "sort_order", label: t("level.sortOrder"), type: "number", min: "0", defaultValue: "0" },
       { key: "benefits", label: t("level.benefits"), multiline: true },
       { key: "status", label: t("common.status"), defaultValue: "active", options: statusOptions.activeInactive }
     ],

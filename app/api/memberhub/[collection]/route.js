@@ -366,12 +366,13 @@ async function applyTransactionToCard(supabase, transaction, previous = null) {
 
   const { data: levels } = await supabase
     .from("membership_levels")
-    .select("name,min_points,min_spend,status")
+    .select("name,min_points,min_spend,sort_order,status")
     .eq("shop_id", transaction.shop_id)
     .eq("status", "active");
+  const tierMode = await settingValue(supabase, transaction.shop_id, "membership_tier_mode", "both").catch(() => "both");
   const nextTier = (levels || [])
-    .filter((level) => updatePayload.points >= Number(level.min_points || 0) && updatePayload.total_spend >= Number(level.min_spend || 0))
-    .sort((left, right) => Number(right.min_points || 0) + Number(right.min_spend || 0) - Number(left.min_points || 0) - Number(left.min_spend || 0))[0]?.name;
+    .filter((level) => levelQualifies(level, updatePayload, tierMode))
+    .sort(compareLevelsDescending)[0]?.name;
 
   if (nextTier) {
     updatePayload.tier = nextTier;
@@ -404,6 +405,36 @@ async function applyTransactionToCard(supabase, transaction, previous = null) {
       actor_id: transaction.actor_id || null
       });
   } catch {}
+}
+
+function levelQualifies(level, card, mode = "both") {
+  const pointsMet = Number(card.points || 0) >= Number(level.min_points || 0);
+  const spendMet = Number(card.total_spend || 0) >= Number(level.min_spend || 0);
+  if (mode === "points") return pointsMet;
+  if (mode === "spend") return spendMet;
+  if (mode === "either") return pointsMet || spendMet;
+  return pointsMet && spendMet;
+}
+
+function compareLevelsDescending(left, right) {
+  const orderDiff = Number(right.sort_order || 0) - Number(left.sort_order || 0);
+  if (orderDiff) return orderDiff;
+  return Number(right.min_points || 0) + Number(right.min_spend || 0) - Number(left.min_points || 0) - Number(left.min_spend || 0);
+}
+
+async function syncMembershipTiers(supabase, shopId) {
+  if (!shopId) return;
+  const [{ data: levels }, { data: cards }] = await Promise.all([
+    supabase.from("membership_levels").select("name,min_points,min_spend,sort_order,status").eq("shop_id", shopId).eq("status", "active"),
+    supabase.from("membership_cards").select("id,points,total_spend,tier").eq("shop_id", shopId)
+  ]);
+  const mode = await settingValue(supabase, shopId, "membership_tier_mode", "both").catch(() => "both");
+  const sortedLevels = [...(levels || [])].sort(compareLevelsDescending);
+  await Promise.all((cards || []).map((card) => {
+    const tier = sortedLevels.find((level) => levelQualifies(level, card, mode))?.name || sortedLevels.at(-1)?.name || "Member";
+    if (tier === card.tier) return Promise.resolve();
+    return supabase.from("membership_cards").update({ tier }).eq("id", card.id);
+  }));
 }
 
 async function createTransactionForServiceRequest(supabase, request) {
@@ -550,7 +581,26 @@ async function pointsForTransaction(supabase, payload) {
   const amount = Number(payload.amount || 0);
   const rateValue = await settingValue(supabase, payload.shop_id, "points_vnd_per_point", "10000").catch(() => "10000");
   const vndPerPoint = Math.max(1, Number(String(rateValue).replace(/[^0-9.]/g, "")) || 10000);
-  return Math.floor(amount / vndPerPoint);
+  let earnRate = 1;
+  if (payload.customer_id && payload.shop_id) {
+    const { data: card } = await supabase
+      .from("membership_cards")
+      .select("tier")
+      .eq("customer_id", payload.customer_id)
+      .eq("shop_id", payload.shop_id)
+      .maybeSingle();
+    if (card?.tier) {
+      const { data: level } = await supabase
+        .from("membership_levels")
+        .select("earn_rate")
+        .eq("shop_id", payload.shop_id)
+        .eq("name", card.tier)
+        .eq("status", "active")
+        .maybeSingle();
+      earnRate = Math.max(1, Number(level?.earn_rate || 1));
+    }
+  }
+  return Math.floor(amount / vndPerPoint) * earnRate;
 }
 
 async function memberUserExists(supabase, userId) {
@@ -810,6 +860,17 @@ async function writeResource(request, params, mode) {
     }
   }
 
+  if (collection === "levels") {
+    payload.min_points = Math.max(0, Number(payload.min_points || 0));
+    payload.min_spend = Math.max(0, Number(payload.min_spend || 0));
+    payload.earn_rate = Math.max(1, Math.min(20, Number(payload.earn_rate || 1)));
+    payload.discount_percent = Math.max(0, Math.min(100, Number(payload.discount_percent || 0)));
+    payload.sort_order = Math.max(0, Number(payload.sort_order || 0));
+    if (!String(payload.name || "").trim()) {
+      return NextResponse.json({ error: "Ten hang thanh vien khong duoc de trong" }, { status: 400 });
+    }
+  }
+
   const permission = await assertCanWrite(supabase, auth.user, config, payload, id);
   if (permission.error) {
     return NextResponse.json({ error: permission.error }, { status: permission.status });
@@ -892,6 +953,7 @@ async function writeResource(request, params, mode) {
   }
 
   let previousTransaction = null;
+  let previousLevel = null;
   let previousShop = null;
   let previousServiceRequest = null;
   if (mode === "patch" && collection === "shops") {
@@ -1035,6 +1097,14 @@ async function writeResource(request, params, mode) {
     }
   }
 
+  if (collection === "levels") {
+    await syncMembershipTiers(supabase, data.shop_id);
+  }
+
+  if (collection === "settings" && data.key === "membership_tier_mode") {
+    await syncMembershipTiers(supabase, data.shop_id);
+  }
+
 
   if (collection === "serviceRequests" && mode === "patch" && data.status === "completed") {
     try {
@@ -1123,6 +1193,15 @@ async function deleteResource(request, params) {
     previousTransaction = previous;
   }
 
+  if (collection === "levels") {
+    const { data: previous } = await supabase
+      .from(config.table)
+      .select("id,shop_id")
+      .eq("id", id)
+      .maybeSingle();
+    previousLevel = previous;
+  }
+
   const { error } = await supabase.from(config.table).delete().eq("id", id);
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });
@@ -1130,6 +1209,10 @@ async function deleteResource(request, params) {
 
   if (previousTransaction) {
     await applyTransactionToCard(supabase, { ...previousTransaction, amount: 0, points_delta: 0 }, previousTransaction);
+  }
+
+  if (previousLevel?.shop_id) {
+    await syncMembershipTiers(supabase, previousLevel.shop_id);
   }
 
   return NextResponse.json({ ok: true, id });

@@ -3965,3 +3965,115 @@ code {
     transition: none;
   }
 }
+
+/* Membership level policy */
+.mh-level-policy {
+  display: grid;
+  gap: 1.2rem;
+  margin-bottom: 1rem;
+  overflow: visible;
+  padding: 1.3rem;
+}
+
+.mh-level-policy-heading .mh-panel-title {
+  margin-bottom: 0.35rem;
+}
+
+.mh-level-policy-heading p {
+  color: var(--mh-muted);
+  font-size: 0.82rem;
+  margin: 0;
+  max-width: 64ch;
+}
+
+.mh-level-policy-grid {
+  align-items: end;
+  display: grid;
+  gap: 0.85rem;
+  grid-template-columns: minmax(14rem, 1fr) minmax(14rem, 1fr) auto;
+}
+
+.mh-level-policy-grid label {
+  color: var(--mh-text);
+  display: grid;
+  font-size: 0.76rem;
+  font-weight: 800;
+  gap: 0.4rem;
+}
+
+.mh-level-policy-grid select,
+.mh-level-policy-grid input {
+  background: var(--mh-panel-soft);
+  border: 1px solid var(--mh-line);
+  border-radius: 8px;
+  color: var(--mh-text);
+  font: inherit;
+  min-height: 2.65rem;
+  outline: 0;
+  padding: 0.65rem 0.75rem;
+  width: 100%;
+}
+
+.mh-level-policy-grid select:focus,
+.mh-level-policy-grid input:focus {
+  border-color: var(--mh-brand);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--mh-brand) 14%, transparent);
+}
+
+.mh-level-point-input {
+  align-items: center;
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.mh-level-point-input small {
+  color: var(--mh-muted);
+  white-space: nowrap;
+}
+
+.mh-level-preview {
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+}
+
+.mh-level-preview article {
+  border-left: 4px solid var(--level-color);
+  border-radius: 8px;
+  background: var(--mh-panel-soft);
+  display: grid;
+  gap: 0.15rem;
+  padding: 0.75rem 0.85rem;
+}
+
+.mh-level-preview article span,
+.mh-level-preview article strong,
+.mh-level-preview article small {
+  display: block;
+}
+
+.mh-level-preview article span {
+  color: var(--mh-muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.mh-level-preview article strong {
+  color: var(--mh-text);
+  font-size: 1.15rem;
+}
+
+.mh-level-preview article small,
+.mh-level-preview > p {
+  color: var(--mh-muted);
+  font-size: 0.7rem;
+  margin: 0;
+}
+
+@media (max-width: 820px) {
+  .mh-level-policy-grid {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+  }
+}

@@ -68,9 +68,10 @@ for (const locale of localeIds) {
     process.stdout.write(`Kept ${locale} (${entries.length} keys)\n`);
     continue;
   }
-  const dictionary = {};
-  for (let index = 0; index < entries.length; index += batchSize) {
-    const batch = entries.slice(index, index + batchSize);
+  const dictionary = { ...(dictionaries[locale] || {}) };
+  const missingEntries = entries.filter(([key]) => !(key in dictionary));
+  for (let index = 0; index < missingEntries.length; index += batchSize) {
+    const batch = missingEntries.slice(index, index + batchSize);
     const translated = await translateBatch(batch.map(([, value]) => value), locale);
     batch.forEach(([key], batchIndex) => {
       dictionary[key] = translated[batchIndex];
