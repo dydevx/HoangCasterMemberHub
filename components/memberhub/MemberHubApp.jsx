@@ -185,6 +185,17 @@ function statusLabel(t, value) {
   }[value] || value || "-";
 }
 
+function genderLabel(t, value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (!normalized) return "-";
+
+  return {
+    female: t("common.female"),
+    male: t("common.male"),
+    other: t("common.other")
+  }[normalized] || value;
+}
+
 function displayAccountName(user, t) {
   if (isSuperAdmin(user)) return t("app.admin");
   return user?.name || "-";
@@ -3254,7 +3265,7 @@ function getColumns(view, t, data = {}) {
       { key: "email", label: t("customer.email") },
       { key: "phone", label: t("customer.phone") },
       { key: "birthday", label: t("customer.birthday"), render: (row) => dateText(row.birthday) },
-      { key: "gender", label: t("customer.gender") },
+      { key: "gender", label: t("customer.gender"), render: (row) => genderLabel(t, row.gender) },
       statusColumn
     ],
     services: [
