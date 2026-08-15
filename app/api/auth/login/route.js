@@ -37,15 +37,20 @@ export async function POST(request) {
     return NextResponse.json({ error: "Server chua cau hinh Supabase." }, { status: 500 });
   }
 
-  const { data: authData } = authClient
-    ? await authClient.auth.signInWithPassword({ email, password })
-    : { data: null };
-
-  const { data: user, error } = await supabase
-    .from("member_users")
-    .select("*")
-    .eq("email", email)
-    .maybeSingle();
+  // These checks are independent. Running them together avoids paying two
+  // Supabase network round trips back-to-back on every login.
+  const [authResult, userResult] = await Promise.all([
+    authClient
+      ? authClient.auth.signInWithPassword({ email, password })
+      : Promise.resolve({ data: null }),
+    supabase
+      .from("member_users")
+      .select("*")
+      .eq("email", email)
+      .maybeSingle()
+  ]);
+  const { data: authData } = authResult;
+  const { data: user, error } = userResult;
 
   const passwordMatches = user && verifyPassword(password, user.password_salt, user.password_hash);
   const supabaseAuthMatches = Boolean(authData?.user);

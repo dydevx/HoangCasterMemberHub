@@ -701,7 +701,16 @@ function MemberHubAppContent({ locale, localeReady, setLocale }) {
 
   async function addLocalRow(collection, row) {
     const savedRow = await saveResource(collection, token, row, "POST");
-    setData(await api("/api/app-data", token));
+    if (collection === "users") {
+      // A newly-created user is already returned by the mutation. Avoid
+      // reloading every dashboard table just to display this one new row.
+      setData((current) => ({
+        ...current,
+        users: [...(current?.users || []), { ...savedRow, role: normalizeRole(savedRow.role) }]
+      }));
+    } else {
+      setData(await api("/api/app-data", token));
+    }
     setToast(t("toast.saved"));
     return savedRow;
   }
