@@ -4,6 +4,11 @@ export const metadata = {
   title: "HoangCaster Member Hub",
   description: "Multi-tenant membership management SaaS for shops, services, customers, points, QR cards, promotions, and revenue reporting.",
   applicationName: "HoangCaster Member Hub",
+  icons: {
+    icon: "/assets/logo.png",
+    shortcut: "/assets/logo.png",
+    apple: "/assets/logo.png"
+  },
   robots: {
     index: true,
     follow: true
